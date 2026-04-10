@@ -92,16 +92,17 @@ The app stores settings with `electron-store` and encrypts secret fields with El
 
 ## App Updates
 
-The desktop app can check for new packaged releases and prompt the user to install them.
+The desktop app can check for new packaged releases and present the appropriate update action for each platform.
 
 - The app reads an update feed base URL from Settings.
 - At runtime it checks `.../darwin/arm64/RELEASES.json` on macOS arm64 and `.../win32/x64/RELEASES` on Windows x64.
-- On macOS, Electron requires the packaged app to be signed before native auto-updates will work.
+- On Windows, the app uses the native Electron / Squirrel updater flow.
+- On macOS, the app checks for newer builds and opens the hosted download. Users may still need to approve the app in `Privacy & Security` after replacing it.
 - Existing installs need one manual upgrade to a version that includes the updater. After that, future builds can be discovered in-app.
 
 When you build a release with `APP_UPDATE_BASE_URL` set, Electron Forge will generate the macOS update manifest alongside the zip artifact so you can upload both to your release host.
 
-For signed macOS releases and release-host setup, see [`docs/RELEASING.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/RELEASING.md) and [`.env.release.example`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.env.release.example).
+For release-host setup and the current Windows/macOS update policy, see [`docs/RELEASING.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/RELEASING.md) and [`.env.release.example`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.env.release.example).
 
 The repo also includes a tag-driven GitHub Actions release workflow at [release.yml](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.github/workflows/release.yml) that is designed to publish GitHub Releases and deploy the updater feed to GitHub Pages.
 

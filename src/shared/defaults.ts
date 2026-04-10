@@ -69,6 +69,7 @@ export const initialBridgeState: BridgeStateSnapshot = {
     releaseNotes: null,
     releaseDate: null,
     feedUrl: null,
+    downloadUrl: null,
     lastCheckedAt: null,
     downloadedAt: null,
     message: 'App update status is loading.',

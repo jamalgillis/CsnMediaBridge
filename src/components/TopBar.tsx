@@ -16,6 +16,8 @@ export default function TopBar() {
   const updateBadge =
     appUpdate.status === 'downloaded'
       ? { tone: 'good' as const, label: 'Update Ready' }
+      : appUpdate.status === 'available'
+        ? { tone: 'warning' as const, label: 'Update Available' }
       : appUpdate.status === 'downloading'
         ? { tone: 'active' as const, label: 'Update Downloading' }
         : appUpdate.status === 'checking'
@@ -105,14 +107,14 @@ export default function TopBar() {
             {state.isWatching ? 'Stop Watcher' : 'Start Watcher'}
           </button>
 
-          {appUpdate.status === 'downloaded' ? (
+          {appUpdate.status === 'downloaded' || appUpdate.status === 'available' ? (
             <button
               onClick={() => void installAppUpdate()}
               className="rounded-widget border border-secondary-400/30 bg-secondary-400/10 px-4 py-2 text-sm font-semibold
                 text-secondary-700 transition hover:bg-secondary-400/20 dark:text-secondary-300"
               title={appUpdate.message}
             >
-              Install Update
+              {appUpdate.status === 'available' ? 'Download Update' : 'Install Update'}
             </button>
           ) : (
             <button
@@ -148,7 +150,7 @@ export default function TopBar() {
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
             </svg>
-            {(state.activeEncodingJobId || appUpdate.status === 'downloaded') && (
+            {(state.activeEncodingJobId || appUpdate.status === 'downloaded' || appUpdate.status === 'available') && (
               <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary-400" />
             )}
           </button>

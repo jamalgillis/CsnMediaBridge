@@ -345,7 +345,7 @@ export default function SettingsPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-white">App Updates</h3>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Existing installs can check this feed for new desktop builds and prompt the user to install them.
+                    Existing installs can check this feed for new desktop builds. Windows can install in-app, while macOS opens the latest download and may need a security approval after replacement.
                   </p>
                 </div>
                 <span className="rounded-full border border-surface-light-border px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-500 dark:border-surface-border dark:text-slate-400">
@@ -356,7 +356,7 @@ export default function SettingsPage() {
               <div className="mt-4 space-y-4">
                 <ToggleRow
                   title="Enable in-app updates"
-                  description="Checks the hosted release feed on launch and on a schedule, then offers an install prompt when a newer build is ready."
+                  description="Checks the hosted release feed on launch and on a schedule, then offers the correct update action for the current platform."
                   checked={draft.appUpdates.enabled}
                   onChange={(checked) =>
                     setDraft({

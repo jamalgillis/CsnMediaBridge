@@ -14,17 +14,26 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  APP_UPDATE_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/downloads
+
 jobs:
+  create-release:
+    name: Prepare GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update release shell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
   build-macos:
     name: Build macOS Release
     runs-on: macos-14
-    env:
-      APP_UPDATE_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/downloads
-      APPLE_SIGN_ENABLED: "true"
-      APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    needs: create-release
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -40,99 +49,109 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Verify release secrets
-        env:
-          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          missing=()
-          for name in \
-            APPLE_CERTIFICATE_P12_BASE64 \
-            APPLE_CERTIFICATE_PASSWORD \
-            APPLE_KEYCHAIN_PASSWORD \
-            APPLE_SIGN_IDENTITY \
-            APPLE_ID \
-            APPLE_APP_SPECIFIC_PASSWORD \
-            APPLE_TEAM_ID
-          do
-            if [ -z "${!name}" ]; then
-              missing+=("$name")
-            fi
-          done
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-          if [ "${#missing[@]}" -gt 0 ]; then
-            printf 'Missing required GitHub secrets for a signed macOS release:\n' >&2
-            printf ' - %s\n' "${missing[@]}" >&2
-            exit 1
-          fi
+      - name: Build macOS release
+        run: pnpm run make:release
+
+      - name: Upload macOS release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=(out/make/zip/darwin/arm64/*)
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+
+      - name: Package macOS updater feed
+        run: |
+          mkdir -p pages/downloads/darwin/arm64
+          cp -R out/make/zip/darwin/arm64/. pages/downloads/darwin/arm64/
+
+      - name: Upload macOS Pages artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-macos
+          path: pages
+
+  build-windows:
+    name: Build Windows Release
+    runs-on: windows-latest
+    needs: create-release
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Import Apple signing certificate
-        env:
-          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-        run: |
-          CERT_PATH="$RUNNER_TEMP/csn-media-bridge-signing.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/csn-media-bridge.keychain-db"
-
-          python3 - <<'PY' "$CERT_PATH"
-          import base64
-          import os
-          import sys
-
-          with open(sys.argv[1], "wb") as file:
-              file.write(base64.b64decode(os.environ["APPLE_CERTIFICATE_P12_BASE64"]))
-          PY
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
-          security default-keychain -d user -s "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security find-identity -v -p codesigning
-
-      - name: Build signed release
+      - name: Build Windows release
         run: pnpm run make:release
 
-      - name: Create or update GitHub release
+      - name: Upload Windows release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
-          fi
-
-          files=(out/make/zip/darwin/arm64/*)
+          files=(out/make/squirrel.windows/x64/*)
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
-      - name: Prepare GitHub Pages updater feed
+      - name: Package Windows updater feed
         run: |
-          mkdir -p pages/downloads/darwin/arm64
-          cp -R out/make/zip/darwin/arm64/. pages/downloads/darwin/arm64/
+          mkdir -p pages/downloads/win32/x64
+          cp -R out/make/squirrel.windows/x64/. pages/downloads/win32/x64/
+
+      - name: Upload Windows Pages artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-windows
+          path: pages
+
+  deploy-pages:
+    name: Deploy Updater Feed
+    runs-on: ubuntu-latest
+    needs:
+      - build-macos
+      - build-windows
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download macOS Pages artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pages-macos
+          path: artifacts/macos
+
+      - name: Download Windows Pages artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pages-windows
+          path: artifacts/windows
+
+      - name: Merge updater feed
+        run: |
+          mkdir -p pages
+          cp -R artifacts/macos/. pages/
+          cp -R artifacts/windows/. pages/
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: pages
 
-  deploy-pages:
-    name: Deploy Updater Feed
-    runs-on: ubuntu-latest
-    needs: build-macos
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

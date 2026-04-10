@@ -50,6 +50,7 @@ export type AppUpdateStatus =
   | 'disabled'
   | 'idle'
   | 'checking'
+  | 'available'
   | 'downloading'
   | 'downloaded'
   | 'up-to-date'
@@ -220,6 +221,7 @@ export interface AppUpdateSnapshot {
   releaseNotes: string | null;
   releaseDate: string | null;
   feedUrl: string | null;
+  downloadUrl: string | null;
   lastCheckedAt: string | null;
   downloadedAt: string | null;
   message: string;

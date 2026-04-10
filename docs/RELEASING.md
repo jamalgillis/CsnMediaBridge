@@ -2,6 +2,11 @@
 
 This app now supports hosted desktop updates for packaged builds.
 
+Current release policy:
+
+- Windows: production updater path
+- macOS: update-visible manual download path
+
 ## 1. Create the dedicated GitHub repo
 
 This app is now its own local Git repository at:
@@ -36,27 +41,18 @@ The app expects platform-specific folders below that base URL:
 - macOS arm64: `.../darwin/arm64/`
 - Windows x64: `.../win32/x64/`
 
-## 3. Add GitHub Actions secrets
+## 3. Enable GitHub Actions releases
 
-Add these repository secrets before pushing a release tag:
+No additional GitHub secrets are required for the current workflow.
 
-- `APPLE_CERTIFICATE_P12_BASE64`
-- `APPLE_CERTIFICATE_PASSWORD`
-- `APPLE_KEYCHAIN_PASSWORD`
-- `APPLE_SIGN_IDENTITY`
-- `APPLE_ID`
-- `APPLE_APP_SPECIFIC_PASSWORD`
-- `APPLE_TEAM_ID`
+The checked-in workflow will:
 
-The workflow imports the `Developer ID Application` certificate into a temporary keychain, signs the mac app, notarizes it, uploads the release assets to GitHub Releases, and deploys the updater feed to GitHub Pages.
+- build an unsigned macOS release
+- build a Windows Squirrel release
+- upload both sets of artifacts to GitHub Releases
+- deploy the updater feed to GitHub Pages
 
-To create `APPLE_CERTIFICATE_P12_BASE64` locally:
-
-```bash
-base64 -i /path/to/DeveloperIDApplication.p12 | pbcopy
-```
-
-Copy [`.env.release.example`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.env.release.example) to your own local release env file if you also want signed local release builds outside CI.
+Copy [`.env.release.example`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.env.release.example) to your own local release env file if you also want to build release artifacts locally.
 
 ## 4. Push a release tag
 
@@ -71,22 +67,28 @@ git push origin v1.0.1
 
 That workflow will:
 
-- build the signed macOS release
+- build the macOS release
+- build the Windows release
 - create or update the matching GitHub Release
 - upload the packaged release files as release assets
-- deploy `RELEASES.json` and the zip file to GitHub Pages
+- deploy the macOS and Windows updater feeds to GitHub Pages
 
 ## 5. Ship one updater-enabled build manually
 
 Users need one manual upgrade to a build that includes the updater. After that, the app can:
 
-- check for new builds on launch and on a timer
-- download updates in the background
-- prompt the user to install the update in-app
+- on Windows:
+  - check for new builds on launch and on a timer
+  - download updates in the background
+  - prompt the user to install the update in-app
+- on macOS:
+  - check for new builds on launch and on a timer
+  - show that a newer build exists
+  - open the hosted download when the user chooses to update
 
 ## Notes
 
-- macOS auto-updates require a signed app.
-- Notarization is strongly recommended so users do not hit Gatekeeper warnings.
-- GitHub CLI auth is currently invalid on this machine, so `gh auth login -h github.com` still needs to be run before creating the remote repo from here.
-- There is currently no signing identity installed in Keychain on this machine, so a fully signed local macOS release still requires the `Developer ID Application` certificate to be installed locally.
+- Windows uses the native Electron / Squirrel updater path.
+- macOS does not use native in-app install yet because Electron requires a signed app for automatic updates on macOS.
+- macOS users can still see that an update exists, download the newer build, replace the app, and approve it in `Privacy & Security` if Gatekeeper blocks it.
+- If you later add a paid Apple Developer account, the repo is already close to supporting signed/notarized macOS releases.
