@@ -1,0 +1,17 @@
+export const IPC_CHANNELS = {
+  stateUpdated: 'media-bridge:state-updated',
+  getState: 'media-bridge:get-state',
+  loadSettings: 'media-bridge:load-settings',
+  saveSettings: 'media-bridge:save-settings',
+  checkForAppUpdates: 'media-bridge:check-for-app-updates',
+  installAppUpdate: 'media-bridge:install-app-update',
+  startWatching: 'media-bridge:start-watching',
+  stopWatching: 'media-bridge:stop-watching',
+  browseDirectory: 'media-bridge:browse-directory',
+  retryJob: 'media-bridge:retry-job',
+  refreshSystem: 'media-bridge:refresh-system',
+  listStoredVideos: 'media-bridge:list-stored-videos',
+  repairStoredVideoUrls: 'media-bridge:repair-stored-video-urls',
+  chooseTrimSource: 'media-bridge:choose-trim-source',
+  trimClip: 'media-bridge:trim-clip',
+} as const;

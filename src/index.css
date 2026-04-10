@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family:
+      'Inter',
+      'Geist Sans',
+      system-ui,
+      sans-serif;
+  }
+
+  /* Light mode (default) */
+  body {
+    @apply bg-surface-light-deep text-slate-900 antialiased;
+  }
+
+  /* Dark mode */
+  .dark body {
+    @apply bg-surface-deep text-slate-100;
+  }
+
+  body,
+  #root {
+    min-height: 100vh;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  }
+
+  .dark * {
+    scrollbar-color: rgba(148, 163, 184, 0.24) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: rgba(148, 163, 184, 0.24);
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  .stored-video-player {
+    overflow: hidden;
+    border-radius: 1.5rem;
+    background:
+      radial-gradient(circle at top left, rgba(56, 189, 248, 0.22), transparent 30%),
+      linear-gradient(135deg, #020617 0%, #0f172a 100%);
+  }
+
+  .stored-video-player__skin {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: transparent;
+  }
+
+  .stored-video-player__skin video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #020617;
+  }
+
+  .trim-video-player {
+    overflow: hidden;
+    border-radius: 1.5rem;
+    background:
+      radial-gradient(circle at top right, rgba(248, 113, 113, 0.2), transparent 35%),
+      radial-gradient(circle at bottom left, rgba(45, 212, 191, 0.18), transparent 30%),
+      linear-gradient(135deg, #020617 0%, #111827 100%);
+  }
+
+  .trim-video-player__skin {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: transparent;
+  }
+
+  .trim-video-player__skin video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #020617;
+  }
+}
