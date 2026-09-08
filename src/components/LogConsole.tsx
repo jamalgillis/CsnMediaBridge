@@ -88,25 +88,25 @@ export default function LogConsole() {
       lineHeight: 1.35,
       cursorBlink: false,
       theme: {
-        background: '#020617',
-        foreground: '#cbd5e1',
-        cursor: '#22d3ee',
-        black: '#0f172a',
+        background: '#0a0b0e',
+        foreground: '#cdd2da',
+        cursor: '#7fc4e3',
+        black: '#14161b',
         red: '#f87171',
-        green: '#34d399',
+        green: '#5ee6ad',
         yellow: '#fbbf24',
         blue: '#60a5fa',
         magenta: '#c084fc',
-        cyan: '#22d3ee',
-        white: '#e2e8f0',
-        brightBlack: '#475569',
+        cyan: '#7fc4e3',
+        white: '#edeef1',
+        brightBlack: '#5c6573',
         brightRed: '#fca5a5',
         brightGreen: '#6ee7b7',
         brightYellow: '#fcd34d',
         brightBlue: '#93c5fd',
         brightMagenta: '#d8b4fe',
-        brightCyan: '#67e8f9',
-        brightWhite: '#f8fafc',
+        brightCyan: '#a8dcf2',
+        brightWhite: '#ffffff',
       },
     });
     const fitAddon = new FitAddon();
@@ -160,29 +160,28 @@ export default function LogConsole() {
 
   return (
     <GlassCard padded={false} className="col-span-full">
-      <div className="flex items-center justify-between border-b border-surface-light-border px-4 py-3 dark:border-surface-border">
+      <div className="flex items-center justify-between px-4 py-3 border-surface-hairline">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Raw Pipeline Console</h2>
+          <h2 className="text-section text-ink">Raw Pipeline Console</h2>
           <div className="flex gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-            <span className="h-2.5 w-2.5 rounded-full bg-secondary-400" />
+            <span className="h-2.5 w-2.5 rounded-full bg-secondary-500" />
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <div
-            className="flex rounded-full bg-surface-light-elevated p-0.5
-              dark:bg-surface-elevated"
+            className="flex rounded-full p-0.5 bg-surface-elevated"
           >
             {filters.map((item) => (
               <button
                 key={item}
                 onClick={() => setFilter(item)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest transition-colors ${
+                className={`rounded-full px-3 py-1 text-overline uppercase transition-colors ${
                   filter === item
-                    ? 'bg-white text-slate-900 shadow-sm dark:bg-surface-card dark:text-white'
-                    : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200'
+                    ? 'shadow-sm bg-surface-card text-ink'
+                    : 'text-ink-dim hover:text-ink'
                 }`}
               >
                 {item}
@@ -192,9 +191,7 @@ export default function LogConsole() {
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="rounded-full p-2 text-slate-400 transition-colors
-              hover:bg-surface-light-elevated hover:text-slate-600
-              dark:hover:bg-surface-elevated dark:hover:text-white"
+            className="rounded-full p-2 text-ink-muted transition-colors hover:bg-surface-elevated hover:text-ink"
           >
             <svg
               className={`h-4 w-4 transition-transform ${isExpanded ? '' : 'rotate-180'}`}
@@ -210,8 +207,8 @@ export default function LogConsole() {
       </div>
 
       {isExpanded && (
-        <div className="bg-slate-950 p-2 dark:bg-slate-950">
-          <div ref={terminalContainerRef} className="h-96 w-full overflow-hidden rounded-widget" />
+        <div className="p-2 bg-surface-canvas">
+          <div ref={terminalContainerRef} className="h-96 w-full overflow-hidden rounded-control" />
         </div>
       )}
     </GlassCard>

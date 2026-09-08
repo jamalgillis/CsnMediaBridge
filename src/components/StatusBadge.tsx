@@ -3,21 +3,18 @@ interface StatusBadgeProps {
   children: string;
 }
 
+/**
+ * Spool's status pill. Color carries meaning here: green is posted/done, amber
+ * is processing, teal is queued/active, red is failure.
+ */
 const toneClasses: Record<StatusBadgeProps['tone'], string> = {
-  good: 'border-secondary-400/20 bg-secondary-400/10 text-secondary-700 dark:text-secondary-300',
-  active: 'border-primary-400/20 bg-primary-400/10 text-primary-700 dark:text-primary-300',
-  warning: 'border-amber-400/20 bg-amber-400/10 text-amber-700 dark:text-amber-300',
-  danger: 'border-red-400/20 bg-red-400/10 text-red-700 dark:text-red-300',
-  neutral:
-    'border-surface-light-border bg-surface-light-elevated text-slate-500 dark:border-surface-border dark:bg-surface-elevated dark:text-slate-400',
+  good: 'border-state-posted/30 bg-state-posted/[.13] text-state-posted',
+  active: 'border-primary-500/40 bg-primary-500/[.16] text-primary-200',
+  warning: 'border-state-processing/30 bg-state-processing/[.12] text-state-processing',
+  danger: 'border-state-danger/30 bg-state-danger/[.13] text-state-danger',
+  neutral: 'border-surface-hairline-strong bg-white/[.05] text-ink-muted',
 };
 
 export default function StatusBadge({ tone, children }: StatusBadgeProps) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-widest ${toneClasses[tone]}`}
-    >
-      {children}
-    </span>
-  );
+  return <span className={`spool-pill ${toneClasses[tone]}`}>{children}</span>;
 }

@@ -90,7 +90,14 @@ export function detectPipelineError(message: string) {
     return 'A network timeout interrupted the upload. Verify connectivity and try the job again.';
   }
 
-  if (normalized.includes('enoent') || normalized.includes('not found')) {
+  if (
+    normalized.includes('enoent') ||
+    normalized.includes('no such file or directory') ||
+    normalized.includes('executable file not found') ||
+    normalized.includes('command not found') ||
+    normalized.includes('cannot find the path specified') ||
+    normalized.includes('the system cannot find the file specified')
+  ) {
     return 'A required executable or file path could not be found. Confirm ffmpeg, ffprobe, rclone, and your folders are available.';
   }
 

@@ -1,7 +1,12 @@
 import { access, readFile } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import path from 'node:path';
-import type { ContentType, RequestedDeliveryType } from '../../shared/types';
+import type {
+  ContentType,
+  RequestedDeliveryType,
+  ReviewStatus,
+  SocialDeploymentStatus,
+} from '../../shared/types';
 
 export const SUPPORTED_INGEST_EXTENSIONS = ['.mp4', '.mov', '.mkv'] as const;
 
@@ -10,6 +15,13 @@ export interface SourceMetadata {
   description?: string;
   series?: string;
   recordedAt?: string;
+  projectName?: string;
+  eventName?: string;
+  cameraId?: string;
+  sourceNode?: string;
+  reviewStatus?: ReviewStatus;
+  socialStatus?: SocialDeploymentStatus;
+  scheduledPublishAt?: string;
   requestedDelivery?: RequestedDeliveryType;
   contentType?: ContentType;
   tags: string[];
@@ -77,6 +89,38 @@ function normalizeContentType(value: unknown) {
   return undefined;
 }
 
+function normalizeReviewStatus(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'needs_review' || normalized === 'approved' || normalized === 'archived') {
+    return normalized;
+  }
+
+  return undefined;
+}
+
+function normalizeSocialStatus(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (
+    normalized === 'none' ||
+    normalized === 'staged' ||
+    normalized === 'scheduled' ||
+    normalized === 'published' ||
+    normalized === 'failed'
+  ) {
+    return normalized;
+  }
+
+  return undefined;
+}
+
 export async function loadSourceMetadata(sourcePath: string): Promise<SourceMetadata> {
   const parsed = path.parse(sourcePath);
   const candidates = [
@@ -95,6 +139,13 @@ export async function loadSourceMetadata(sourcePath: string): Promise<SourceMeta
         description: normalizeOptionalString(json.description),
         series: normalizeOptionalString(json.series),
         recordedAt: normalizeOptionalString(json.recordedAt),
+        projectName: normalizeOptionalString(json.projectName ?? json.project ?? json.client),
+        eventName: normalizeOptionalString(json.eventName ?? json.event ?? json.shootName),
+        cameraId: normalizeOptionalString(json.cameraId ?? json.camera ?? json.cameraLetter),
+        sourceNode: normalizeOptionalString(json.sourceNode ?? json.source ?? json.node),
+        reviewStatus: normalizeReviewStatus(json.reviewStatus ?? json.review),
+        socialStatus: normalizeSocialStatus(json.socialStatus ?? json.socialDeploymentStatus),
+        scheduledPublishAt: normalizeOptionalString(json.scheduledPublishAt ?? json.publishAt),
         requestedDelivery: normalizeRequestedDelivery(
           json.requestedDelivery ?? json.deliveryType ?? json.delivery,
         ),
@@ -111,6 +162,8 @@ export async function loadSourceMetadata(sourcePath: string): Promise<SourceMeta
   return {
     requestedDelivery: undefined,
     contentType: undefined,
+    reviewStatus: undefined,
+    socialStatus: undefined,
     tags: [],
     playlistTitles: [],
     sidecarPath: null,

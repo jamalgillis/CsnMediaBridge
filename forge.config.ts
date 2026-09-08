@@ -4,6 +4,7 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import type { NotaryToolCredentials } from '@electron/notarize/lib/types';
 import type { OsxSignOptions } from '@electron/packager';
+import path from 'node:path';
 
 const APP_BUNDLE_ID = 'com.gfamagency.csnmediabridge';
 
@@ -72,11 +73,14 @@ function buildMacNotarizeConfig(): NotaryToolCredentials | undefined {
 
 const osxSign = buildMacSignConfig();
 const osxNotarize = osxSign ? buildMacNotarizeConfig() : undefined;
+const appIconPath = path.resolve(__dirname, 'assets', 'icon');
+const windowsSetupIconPath = path.resolve(__dirname, 'assets', 'icon.ico');
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     appBundleId: APP_BUNDLE_ID,
+    icon: appIconPath,
     osxSign,
     osxNotarize,
   },
@@ -86,6 +90,7 @@ const config: ForgeConfig = {
       name: '@electron-forge/maker-squirrel',
       config: {
         name: 'csnmediabridge',
+        setupIcon: windowsSetupIconPath,
         remoteReleases: appUpdateBaseUrl
           ? `${appUpdateBaseUrl}/win32/${process.arch}`
           : undefined,

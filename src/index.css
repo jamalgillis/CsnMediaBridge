@@ -2,23 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Spool design system — dark only.
+ * Tokens mirror `Spool - Design System - Teal.dc.html`; see data/config/colors.js.
+ */
+
 @layer base {
   html {
-    font-family:
-      'Inter',
-      'Geist Sans',
-      system-ui,
-      sans-serif;
+    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+    font-size: 14px;
   }
 
-  /* Light mode (default) */
   body {
-    @apply bg-surface-light-deep text-slate-900 antialiased;
-  }
-
-  /* Dark mode */
-  .dark body {
-    @apply bg-surface-deep text-slate-100;
+    @apply bg-surface-canvas text-ink antialiased;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
   }
 
   body,
@@ -27,17 +26,12 @@
   }
 
   * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
-  }
-
-  .dark * {
-    scrollbar-color: rgba(148, 163, 184, 0.24) transparent;
+    box-sizing: border-box;
   }
 
   ::-webkit-scrollbar {
-    width: 0.625rem;
-    height: 0.625rem;
+    width: 11px;
+    height: 11px;
   }
 
   ::-webkit-scrollbar-track {
@@ -45,8 +39,31 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    border-radius: 9999px;
-    background: rgba(148, 163, 184, 0.24);
+    background: rgba(255, 255, 255, 0.11);
+    border-radius: 9px;
+    border: 3px solid #0a0b0e;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.11) transparent;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #5c6573;
+  }
+
+  select {
+    appearance: none;
+  }
+
+  /* Native checkboxes/radios pick up the action color instead of browser blue. */
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='range'],
+  progress {
+    accent-color: #0e79b2;
   }
 
   button,
@@ -56,48 +73,379 @@
     font: inherit;
   }
 
-  .stored-video-player {
-    overflow: hidden;
-    border-radius: 1.5rem;
-    background:
-      radial-gradient(circle at top left, rgba(56, 189, 248, 0.22), transparent 30%),
-      linear-gradient(135deg, #020617 0%, #0f172a 100%);
+  /* Numerics are always mono — counts, durations, sizes, timecodes, IDs. */
+  input[type='number'],
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'] {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
   }
 
-  .stored-video-player__skin {
-    display: block;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    background: transparent;
+  ::selection {
+    background: rgba(14, 121, 178, 0.35);
+    color: #edeef1;
+  }
+}
+
+@layer components {
+  /* ---------- Buttons ---------- */
+  .spool-btn {
+    @apply inline-flex h-control flex-none cursor-pointer items-center justify-center gap-[7px]
+      rounded-control px-4 text-body font-semibold transition
+      disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  .stored-video-player__skin video {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    background: #020617;
+  .spool-btn-primary {
+    @apply spool-btn border-none bg-primary-500 text-white hover:bg-primary-600;
   }
 
-  .trim-video-player {
-    overflow: hidden;
-    border-radius: 1.5rem;
-    background:
-      radial-gradient(circle at top right, rgba(248, 113, 113, 0.2), transparent 35%),
-      radial-gradient(circle at bottom left, rgba(45, 212, 191, 0.18), transparent 30%),
-      linear-gradient(135deg, #020617 0%, #111827 100%);
+  .spool-btn-secondary {
+    @apply spool-btn border border-surface-hairline-strong bg-surface-field text-ink-strong
+      hover:border-white/[.22];
   }
 
-  .trim-video-player__skin {
-    display: block;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    background: transparent;
+  .spool-btn-ghost {
+    @apply spool-btn border border-transparent bg-transparent text-ink-muted
+      hover:bg-surface-raised hover:text-ink;
   }
 
-  .trim-video-player__skin video {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    background: #020617;
+  /* Sage is only ever clip / notify. */
+  .spool-btn-accent {
+    @apply inline-flex flex-none cursor-pointer items-center gap-1.5 rounded-chip border-none
+      bg-secondary-500/[.13] px-[13px] py-2 text-control font-semibold text-secondary-300
+      transition hover:bg-secondary-500/20 disabled:cursor-not-allowed disabled:opacity-50;
   }
+
+  .spool-btn-danger {
+    @apply spool-btn border border-state-danger/30 bg-state-danger/[.12] text-state-danger
+      hover:bg-state-danger/20;
+  }
+
+  .spool-icon-btn {
+    @apply flex h-control w-control flex-none cursor-pointer items-center justify-center
+      rounded-control border border-surface-hairline-strong bg-surface-field text-ink-muted
+      transition hover:border-white/[.22] hover:text-ink
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Small inline action square, used on card footers and list rows. */
+  .spool-quiet-btn {
+    @apply flex flex-none cursor-pointer items-center justify-center rounded-chip border-none
+      bg-white/[.05] text-ink-muted transition hover:bg-primary-500/[.18] hover:text-primary-200;
+  }
+
+  /* ---------- Chips & tabs ---------- */
+  .spool-chip {
+    @apply cursor-pointer whitespace-nowrap rounded-[9px] border px-3.5 py-[7px] text-control
+      font-semibold transition;
+  }
+
+  .spool-chip-off {
+    @apply spool-chip border-white/[.09] bg-surface-field text-ink-muted hover:text-ink;
+  }
+
+  .spool-chip-on {
+    @apply spool-chip border-primary-500/50 bg-primary-500/[.16] text-primary-200;
+  }
+
+  .spool-tab {
+    @apply -mb-px cursor-pointer border-none border-b-2 border-b-transparent bg-none px-0.5 py-3
+      text-body font-medium text-ink-muted transition hover:text-ink-strong;
+  }
+
+  .spool-tab-on {
+    @apply spool-tab border-b-primary-500 font-bold text-ink;
+  }
+
+  /* ---------- Surfaces ---------- */
+  .spool-card {
+    @apply rounded-card border border-surface-hairline bg-surface-card;
+  }
+
+  .spool-panel {
+    @apply rounded-card border border-surface-hairline bg-surface-card p-5;
+  }
+
+  .spool-well {
+    @apply rounded-panel border border-white/[.06] bg-surface-well;
+  }
+
+  .spool-pop {
+    @apply z-30 rounded-panel border border-surface-hairline-strong bg-surface-elevated p-1.5
+      shadow-pop animate-spoolin-fast;
+  }
+
+  .spool-rule {
+    @apply h-6 w-px flex-none bg-white/[.09];
+  }
+
+  /* ---------- Form fields ---------- */
+  .spool-field {
+    @apply flex h-control w-full items-center gap-[9px] rounded-control border
+      border-surface-hairline bg-surface-field px-3 text-body text-ink outline-none transition
+      focus-within:border-primary-500/60;
+  }
+
+  .spool-input {
+    @apply h-control w-full rounded-control border border-surface-hairline bg-surface-field px-3
+      text-body text-ink outline-none transition placeholder:text-ink-dim
+      focus:border-primary-500/60 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .spool-textarea {
+    @apply w-full rounded-control border border-surface-hairline bg-surface-field px-3 py-2.5
+      text-body leading-relaxed text-ink outline-none transition placeholder:text-ink-dim
+      focus:border-primary-500/60;
+  }
+
+  .spool-select {
+    @apply h-control cursor-pointer rounded-control border border-surface-hairline
+      bg-surface-field pl-3.5 pr-8 text-control text-ink-muted outline-none transition
+      focus:border-primary-500/60;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%235C6573' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+  }
+
+  .spool-label {
+    @apply mb-1.5 block text-overline uppercase text-ink-dim;
+  }
+
+  /* Keyboard hint / unit suffix, e.g. ⌘K */
+  .spool-kbd {
+    @apply flex-none rounded-[5px] border border-surface-hairline-strong px-[5px] py-px
+      font-mono text-micro text-ink-dim;
+  }
+
+  /* ---------- Status ---------- */
+  .spool-status {
+    @apply inline-flex flex-none items-center gap-1.5 rounded-badge px-2 py-0.5 font-mono
+      text-micro font-semibold;
+  }
+
+  .spool-status-ready {
+    @apply spool-status bg-state-posted/[.16] text-state-posted;
+  }
+
+  .spool-status-processing {
+    @apply spool-status bg-state-processing/[.16] text-state-processing;
+  }
+
+  .spool-status-draft {
+    @apply spool-status bg-white/[.08] text-ink-muted;
+  }
+
+  .spool-status-published {
+    @apply spool-status bg-primary-500/[.18] text-primary-200;
+  }
+
+  .spool-status-failed {
+    @apply spool-status bg-state-danger/[.16] text-state-danger;
+  }
+
+  /* Bordered variant used standalone (outside a thumbnail overlay). */
+  .spool-pill {
+    @apply inline-flex flex-none items-center gap-1.5 rounded-chip border px-[9px] py-1
+      font-mono text-micro font-bold uppercase;
+  }
+
+  .spool-badge-count {
+    @apply flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-[9px]
+      bg-secondary-500 px-[5px] font-mono text-[10.5px] font-bold text-white;
+  }
+
+  .spool-tag {
+    @apply flex-none rounded-[5px] border border-surface-hairline-strong px-1.5 py-0.5 font-mono
+      text-[9.5px] tracking-[.04em] text-ink-faint;
+  }
+
+  /* ---------- Sidebar nav ---------- */
+  .spool-nav {
+    @apply flex w-full cursor-pointer items-center gap-[11px] rounded-[9px] border
+      border-transparent px-2.5 py-2 text-left text-body font-medium text-ink-muted
+      transition-colors hover:bg-surface-raised;
+  }
+
+  .spool-nav-on {
+    @apply spool-nav border-primary-500/50 bg-primary-500/[.16] font-semibold text-primary-200;
+  }
+
+  .spool-section-label {
+    @apply px-[11px] pb-2 pt-4 text-overline uppercase text-ink-dim;
+  }
+
+  /* ---------- Thumbnails ---------- */
+  /* Scanline + vignette pair, layered over the per-asset gradient. */
+  .spool-scanline {
+    @apply pointer-events-none absolute inset-0;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0) 0,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.07) 3px
+    );
+  }
+
+  .spool-vignette {
+    @apply pointer-events-none absolute inset-0;
+    background: radial-gradient(62% 60% at 50% 42%, rgba(255, 255, 255, 0.13), transparent 70%);
+  }
+
+  .spool-play {
+    @apply absolute left-1/2 top-1/2 flex h-[42px] w-[42px] -translate-x-1/2 -translate-y-1/2
+      items-center justify-center rounded-full border border-white/[.28] bg-surface-canvas/[.45]
+      backdrop-blur-[7px];
+  }
+
+  .spool-timecode {
+    @apply absolute bottom-[9px] right-[9px] rounded-[5px] bg-[rgba(8,9,12,.78)] px-1.5 py-0.5
+      font-mono text-count text-ink;
+  }
+
+  /* Kind badge (VOD / Short) on a thumbnail corner. */
+  .spool-kind {
+    @apply rounded-badge border border-white/[.18] bg-[rgba(8,9,12,.62)] px-2 py-0.5 font-mono
+      text-micro font-bold tracking-[.03em] text-ink-strong;
+  }
+
+  .spool-kind-short {
+    @apply rounded-badge border-none bg-secondary-500/90 px-2 py-0.5 font-mono text-micro
+      font-bold tracking-[.03em] text-white;
+  }
+}
+
+@layer utilities {
+  .spool-mono {
+    @apply font-mono text-count text-ink-dim;
+  }
+}
+
+/* ---------- Video players ---------- */
+
+.stored-video-player {
+  overflow: hidden;
+  border-radius: 13px;
+  background: #0e1014;
+}
+
+.stored-video-player__skin {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: transparent;
+  --media-border-radius: 13px;
+  --media-video-border-radius: 13px;
+  --media-color-primary: #edeef1;
+  --media-controls-transition-duration: 180ms;
+  --media-controls-transition-timing-function: ease-out;
+  --media-popup-transition-duration: 150ms;
+  --media-popup-transition-timing-function: ease-out;
+  --media-surface-background-color: rgba(10, 11, 14, 0.82);
+  --media-surface-backdrop-filter: blur(14px);
+  --media-surface-outer-border-color: rgba(255, 255, 255, 0.1);
+  --media-surface-inner-border-color: rgba(255, 255, 255, 0.07);
+  --media-surface-shadow-color: rgba(0, 0, 0, 0.55);
+}
+
+.stored-video-player__skin video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #0e1014;
+}
+
+.stored-video-player__skin.media-default-skin .media-overlay {
+  background-image: linear-gradient(to top, rgba(8, 9, 12, 0.8), rgba(8, 9, 12, 0));
+}
+
+.stored-video-player__skin.media-default-skin .media-controls {
+  border-radius: 12px;
+  background: rgba(10, 11, 14, 0.82);
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.stored-video-player--hover-controls .stored-video-player__skin.media-default-skin .media-overlay,
+.stored-video-player--hover-controls .stored-video-player__skin.media-default-skin .media-controls {
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.stored-video-player--hover-controls .stored-video-player__skin.media-default-skin .media-controls {
+  transform: translateY(0.75rem);
+}
+
+.stored-video-player--hover-controls:hover .stored-video-player__skin.media-default-skin .media-overlay,
+.stored-video-player--hover-controls:focus-within .stored-video-player__skin.media-default-skin .media-overlay,
+.stored-video-player--hover-controls:hover .stored-video-player__skin.media-default-skin .media-controls,
+.stored-video-player--hover-controls:focus-within .stored-video-player__skin.media-default-skin .media-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.stored-video-player--hover-controls:hover .stored-video-player__skin.media-default-skin .media-controls,
+.stored-video-player--hover-controls:focus-within .stored-video-player__skin.media-default-skin .media-controls {
+  transform: translateY(0);
+}
+
+.stored-video-player__skin.media-default-skin .media-button--subtle:hover,
+.stored-video-player__skin.media-default-skin .media-button--subtle:focus-visible,
+.stored-video-player__skin.media-default-skin .media-button--subtle[aria-expanded='true'] {
+  background-color: rgba(14, 121, 178, 0.18);
+}
+
+.stored-video-player__skin.media-default-skin .media-button--primary {
+  background: #0e79b2;
+  color: #fff;
+}
+
+.stored-video-player__skin.media-default-skin .media-time {
+  color: #edeef1;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.stored-video-player__skin.media-default-skin .media-slider__track {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.stored-video-player__skin.media-default-skin .media-slider__fill {
+  background: #0e79b2;
+}
+
+.stored-video-player__skin.media-default-skin .media-slider__buffer {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.stored-video-player__skin.media-default-skin .media-slider__thumb {
+  background-color: #edeef1;
+}
+
+.stored-video-player__skin.media-default-skin .media-preview,
+.stored-video-player__skin.media-default-skin .media-tooltip,
+.stored-video-player__skin.media-default-skin .media-popover {
+  background: #1a1d24;
+  color: #edeef1;
+}
+
+.trim-video-player {
+  overflow: hidden;
+  border-radius: 13px;
+  background: #0e1014;
+}
+
+.trim-video-player__skin {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: transparent;
+}
+
+.trim-video-player__skin video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #0e1014;
 }

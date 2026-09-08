@@ -3,6 +3,7 @@ import SystemHealth from '../components/SystemHealth';
 import LogConsole from '../components/LogConsole';
 import MetricCard from '../components/MetricCard';
 import GlassCard from '../components/GlassCard';
+import ManualIntakePanel from '../components/ManualIntakePanel';
 import { useBridge } from '../context/BridgeContext';
 
 export default function DashboardPage() {
@@ -12,22 +13,25 @@ export default function DashboardPage() {
   const latestJob = state.jobs[0];
 
   return (
-    <div className="space-y-6">
+    <div className="px-6 pb-11 pt-[22px]">
+      <div className="mb-5">
+        <h1 className="text-page text-ink">Operations</h1>
+        <p className="mt-1 text-control text-ink-muted">
+          Watcher, ingest queue, and system health for this workstation.
+        </p>
+      </div>
+
+      <div className="space-y-5">
       {actionError && (
-        <GlassCard className="border-red-400/20 bg-red-50 dark:bg-red-400/10">
+        <GlassCard className="border-state-danger/30 bg-state-danger/[.12]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-red-500 dark:text-red-300">
-                Attention
-              </p>
-              <p className="mt-2 text-sm text-red-700 dark:text-red-100">{actionError}</p>
+              <p className="text-overline uppercase text-state-danger">Attention</p>
+              <p className="mt-2 text-body text-state-danger">{actionError}</p>
             </div>
             <button
               onClick={clearActionError}
-              className="rounded-widget border border-red-400/20 px-4 py-2
-                text-xs font-semibold uppercase tracking-widest text-red-600
-                transition hover:bg-red-400/10
-                dark:text-red-200"
+              className="spool-btn-danger h-9"
             >
               Dismiss
             </button>
@@ -92,13 +96,15 @@ export default function DashboardPage() {
       </div>
 
       {/* Main content - 12-col grid */}
-      <div className="grid gap-6 xl:grid-cols-12">
+      <div className="grid gap-5 xl:grid-cols-12">
+        <ManualIntakePanel />
         <JobMonitor />
         <SystemHealth />
       </div>
 
       {/* Log Console */}
       <LogConsole />
+      </div>
     </div>
   );
 }

@@ -33,6 +33,20 @@ The end-to-end pipeline is:
 - Supports retrying failed jobs from the dashboard.
 - Supports automatic cleanup of local HLS output and poster files after successful upload and registration.
 
+## Manual Offload Workspace
+
+- Dedicated `Offload` page for post-shoot folder handoff.
+- Lets operators choose a local source folder manually instead of waiting on the watcher.
+- Copies the full source tree directly into the root of a dated package under a configurable offload destination.
+- Keeps video files on the configured local offload drive instead of uploading them.
+- Persists an `offload-manifest.json` and `offload.log` inside each package for later reference.
+- Supports a selectable local copy mode: fast metadata-based reuse by default, or slower checksum verification for stricter local-original validation.
+- Uses checksum verification to skip webp outputs that already match a previous run.
+- Builds a parallel `web-ready` folder with mirrored `webp` versions of `.png`, `.jpg`, and `.jpeg` assets.
+- Can upload still-image assets only to Backblaze B2 under a separate configurable offload prefix.
+- Supports pause and cancel controls, then resumes the same package on the next matching run.
+- Streams offload progress back to the renderer for live copy, conversion, and upload status.
+
 ## Pro-Grade Transcode Engine
 
 - Uses FFmpeg for ingest processing.
@@ -124,6 +138,22 @@ Each registered video can store:
 - Automatic unique slug generation for playlists.
 - Ordered playlist items through a numeric `position` field.
 
+## VOD Library And Asset Management
+
+- Dedicated Convex-backed stored-video library view in the desktop app.
+- Loads the full library through paginated Convex reads instead of only showing ready preview assets.
+- Supports search across title, source file name, tags, playlists, description, series, and status.
+- Supports status filtering for `draft`, `ready`, `archived`, `error`, `processing`, and `uploading`.
+- Shows non-playable assets in the library even when preview is not yet available.
+- Supports in-app metadata editing for title, description, tags, playlists, series, recorded-at timestamp, and status.
+- Supports explicit publish and unpublish controls that map to `ready` and `draft`.
+- Synchronizes playlist membership changes back into Convex, including removing outdated playlist assignments.
+- Can repair stored playback and poster URLs for existing Convex records.
+- Can generate multiple poster-frame candidates from a stored playback asset.
+- Lets operators preview candidate poster frames in the app.
+- Can upload an approved poster frame back to Cloudflare R2 and patch the stored Convex record with the new poster URL.
+- Applies cache-busted poster URLs in the renderer so poster replacements refresh immediately after selection.
+
 ## Dashboard and Operator Experience
 
 - Live watcher state and queue depth.
@@ -141,6 +171,10 @@ Each registered video can store:
   - cleanup
 - Job history with complete and error states.
 - Retry button for failed jobs.
+- Upload audit tools for failed or in-flight cloud transfers.
+- Per-job cloud audit view that compares expected local ingest outputs against actual Backblaze B2 and Cloudflare R2 objects.
+- Same-prefix resume action for failed uploads so operators can retry against the original cloud path instead of creating a brand-new remote folder.
+- Remote cleanup action for clearing orphaned partial upload objects before rerunning a failed ingest.
 - Job cards that display:
   - source size
   - source resolution
@@ -151,6 +185,10 @@ Each registered video can store:
   - tags
   - playlist titles
   - series
+- Upload audit sections that summarize:
+  - missing cloud objects
+  - unexpected remote objects
+  - size mismatches between local outputs and uploaded files
 - Toggleable xterm-based pipeline console with live FFmpeg, rclone, watcher, Convex, and system logs.
 
 ## Settings and Credential Management
@@ -168,6 +206,7 @@ Each registered video can store:
 - Toggle for temp file cleanup after success.
 - Toggle for native desktop notifications.
 - Backblaze B2 bucket, prefix, and credentials.
+- Manual offload destination drive/folder, local copy mode, and image-upload Backblaze prefix.
 - Cloudflare R2 account, bucket, prefix, public base URL, and credentials.
 - Convex deployment URL and mutation path.
 - Secrets stored with Electron Store and encrypted through Electron safe storage when available.

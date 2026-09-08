@@ -1,5 +1,6 @@
 import Store from 'electron-store';
 import { safeStorage } from 'electron';
+import crypto from 'node:crypto';
 import { defaultSettings } from '../../shared/defaults';
 import type { AppSettings } from '../../shared/types';
 
@@ -19,11 +20,15 @@ interface PersistedSettings {
   autoProgressiveMaxDurationSeconds: number;
   readyCheckIntervalMs: number;
   readyCheckStablePasses: number;
+  storage?: {
+    layout: AppSettings['storage']['layout'];
+  };
   b2: {
     bucket: string;
     pathPrefix: string;
     keyId: ProtectedValue;
     applicationKey: ProtectedValue;
+    s3Endpoint?: string;
   };
   r2: {
     accountId: string;
@@ -36,6 +41,12 @@ interface PersistedSettings {
   convex: {
     deploymentUrl: string;
     mutationPath: string;
+    nodeToken: ProtectedValue;
+  };
+  offload: {
+    localFolder: string;
+    b2PathPrefix: string;
+    localCopyMode: AppSettings['offload']['localCopyMode'];
   };
   appUpdates: {
     enabled: boolean;
@@ -46,6 +57,7 @@ interface PersistedSettings {
 
 interface StoreShape {
   settings: PersistedSettings;
+  desktopNodeKey?: string;
 }
 
 function encryptSecret(value: string) {
@@ -102,11 +114,15 @@ function normalizeSettings(settings: AppSettings): AppSettings {
       2,
       settings.readyCheckStablePasses || defaultSettings.readyCheckStablePasses,
     ),
+    storage: {
+      layout: settings.storage?.layout === 'legacy' ? 'legacy' : 'canonical',
+    },
     b2: {
       bucket: settings.b2.bucket.trim(),
       pathPrefix: settings.b2.pathPrefix.trim(),
       keyId: settings.b2.keyId.trim(),
       applicationKey: settings.b2.applicationKey.trim(),
+      s3Endpoint: settings.b2.s3Endpoint.trim().replace(/\/+$/, ''),
     },
     r2: {
       accountId: settings.r2.accountId.trim(),
@@ -119,6 +135,12 @@ function normalizeSettings(settings: AppSettings): AppSettings {
     convex: {
       deploymentUrl: settings.convex.deploymentUrl.trim(),
       mutationPath: settings.convex.mutationPath.trim(),
+      nodeToken: settings.convex.nodeToken.trim(),
+    },
+    offload: {
+      localFolder: settings.offload.localFolder.trim(),
+      b2PathPrefix: settings.offload.b2PathPrefix.trim(),
+      localCopyMode: settings.offload.localCopyMode ?? defaultSettings.offload.localCopyMode,
     },
     appUpdates: {
       enabled: settings.appUpdates.enabled,
@@ -149,11 +171,15 @@ export class StoreService {
         autoProgressiveMaxDurationSeconds: defaultSettings.autoProgressiveMaxDurationSeconds,
         readyCheckIntervalMs: defaultSettings.readyCheckIntervalMs,
         readyCheckStablePasses: defaultSettings.readyCheckStablePasses,
+        storage: {
+          layout: defaultSettings.storage.layout,
+        },
         b2: {
           bucket: defaultSettings.b2.bucket,
           pathPrefix: defaultSettings.b2.pathPrefix,
           keyId: '',
           applicationKey: '',
+          s3Endpoint: defaultSettings.b2.s3Endpoint,
         },
         r2: {
           accountId: defaultSettings.r2.accountId,
@@ -166,6 +192,12 @@ export class StoreService {
         convex: {
           deploymentUrl: defaultSettings.convex.deploymentUrl,
           mutationPath: defaultSettings.convex.mutationPath,
+          nodeToken: '',
+        },
+        offload: {
+          localFolder: defaultSettings.offload.localFolder,
+          b2PathPrefix: defaultSettings.offload.b2PathPrefix,
+          localCopyMode: defaultSettings.offload.localCopyMode,
         },
         appUpdates: {
           enabled: defaultSettings.appUpdates.enabled,
@@ -175,6 +207,71 @@ export class StoreService {
       },
     },
   }) as unknown as { store: StoreShape };
+
+  /**
+   * Which key layout this install writes.
+   *
+   * Installs that predate the storage contract have no persisted `storage`
+   * block but do have cloud buckets configured, which means they already have
+   * objects under the flat legacy prefixes. Those are pinned to `legacy` and
+   * persisted, so upgrading the app never silently starts writing a second key
+   * convention into a bucket an operator has not been told about. Switching to
+   * `canonical` stays an explicit choice in Settings.
+   */
+  private resolvePersistedStorageLayout(settings: PersistedSettings): AppSettings['storage']['layout'] {
+    if (settings.storage?.layout) {
+      return settings.storage.layout;
+    }
+
+    const hasExistingCloudData = Boolean(
+      settings.b2?.bucket?.trim() || settings.r2?.bucket?.trim(),
+    );
+    const layout = hasExistingCloudData ? 'legacy' : defaultSettings.storage.layout;
+
+    this.store.store = {
+      ...this.store.store,
+      settings: { ...settings, storage: { layout } },
+    };
+
+    return layout;
+  }
+
+  /**
+   * Rewrites a function path saved before the media functions moved into the
+   * shared sports deployment.
+   *
+   * The default changed to `media/videos:createVodEntry`, but a default only
+   * applies to installs with nothing persisted. An existing workstation carries
+   * `videos:createVodEntry` in its store, and `deriveFunctionPath` builds every
+   * library call from that module name — so without this the app would upgrade
+   * cleanly and then fail every Convex call against a module that no longer
+   * exists.
+   *
+   * Only the known pre-merge value is rewritten. An operator who deliberately
+   * pointed at something else keeps it.
+   */
+  private resolvePersistedMutationPath(persisted: string | undefined) {
+    const current = persisted?.trim();
+    if (!current) {
+      return defaultSettings.convex.mutationPath;
+    }
+
+    const [moduleName, functionName] = current.split(':');
+    if (moduleName !== 'videos') {
+      return current;
+    }
+
+    const migrated = `media/videos:${functionName || 'createVodEntry'}`;
+    this.store.store = {
+      ...this.store.store,
+      settings: {
+        ...this.store.store.settings,
+        convex: { ...this.store.store.settings.convex, mutationPath: migrated },
+      },
+    };
+
+    return migrated;
+  }
 
   loadSettings(): AppSettings {
     const { settings } = this.store.store;
@@ -194,11 +291,15 @@ export class StoreService {
       autoProgressiveMaxDurationSeconds: settings.autoProgressiveMaxDurationSeconds,
       readyCheckIntervalMs: settings.readyCheckIntervalMs,
       readyCheckStablePasses: settings.readyCheckStablePasses,
+      storage: {
+        layout: this.resolvePersistedStorageLayout(settings),
+      },
       b2: {
         bucket: settings.b2.bucket,
         pathPrefix: settings.b2.pathPrefix,
         keyId: decryptSecret(settings.b2.keyId),
         applicationKey: decryptSecret(settings.b2.applicationKey),
+        s3Endpoint: settings.b2.s3Endpoint ?? defaultSettings.b2.s3Endpoint,
       },
       r2: {
         accountId: settings.r2.accountId,
@@ -210,7 +311,13 @@ export class StoreService {
       },
       convex: {
         deploymentUrl: settings.convex.deploymentUrl,
-        mutationPath: settings.convex.mutationPath,
+        mutationPath: this.resolvePersistedMutationPath(settings.convex.mutationPath),
+        nodeToken: decryptSecret(settings.convex.nodeToken ?? ''),
+      },
+      offload: {
+        localFolder: settings.offload?.localFolder ?? defaultSettings.offload.localFolder,
+        b2PathPrefix: settings.offload?.b2PathPrefix ?? defaultSettings.offload.b2PathPrefix,
+        localCopyMode: settings.offload?.localCopyMode ?? defaultSettings.offload.localCopyMode,
       },
       appUpdates: {
         enabled: persistedAppUpdates.enabled ?? defaultSettings.appUpdates.enabled,
@@ -219,6 +326,20 @@ export class StoreService {
           persistedAppUpdates.checkIntervalMinutes ?? defaultSettings.appUpdates.checkIntervalMinutes,
       },
     });
+  }
+
+  getDesktopNodeKey() {
+    const existing = this.store.store.desktopNodeKey?.trim();
+    if (existing) {
+      return existing;
+    }
+
+    const nodeKey = `desktop_${crypto.randomUUID()}`;
+    this.store.store = {
+      ...this.store.store,
+      desktopNodeKey: nodeKey,
+    };
+    return nodeKey;
   }
 
   saveSettings(settings: AppSettings) {
@@ -240,11 +361,15 @@ export class StoreService {
         autoProgressiveMaxDurationSeconds: normalized.autoProgressiveMaxDurationSeconds,
         readyCheckIntervalMs: normalized.readyCheckIntervalMs,
         readyCheckStablePasses: normalized.readyCheckStablePasses,
+        storage: {
+          layout: normalized.storage.layout,
+        },
         b2: {
           bucket: normalized.b2.bucket,
           pathPrefix: normalized.b2.pathPrefix,
           keyId: encryptSecret(normalized.b2.keyId),
           applicationKey: encryptSecret(normalized.b2.applicationKey),
+          s3Endpoint: normalized.b2.s3Endpoint,
         },
         r2: {
           accountId: normalized.r2.accountId,
@@ -257,6 +382,12 @@ export class StoreService {
         convex: {
           deploymentUrl: normalized.convex.deploymentUrl,
           mutationPath: normalized.convex.mutationPath,
+          nodeToken: encryptSecret(normalized.convex.nodeToken),
+        },
+        offload: {
+          localFolder: normalized.offload.localFolder,
+          b2PathPrefix: normalized.offload.b2PathPrefix,
+          localCopyMode: normalized.offload.localCopyMode,
         },
         appUpdates: {
           enabled: normalized.appUpdates.enabled,

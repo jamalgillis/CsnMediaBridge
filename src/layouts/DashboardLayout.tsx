@@ -2,13 +2,18 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 
+/**
+ * Spool's shell: a fixed 248px rail beside a single scrolling pane. The window
+ * itself never scrolls — only the content column does, so the rail and the 60px
+ * top bar stay put.
+ */
 export default function DashboardLayout() {
   return (
-    <div className="min-h-screen bg-surface-light-deep text-slate-900 dark:bg-surface-deep dark:text-white">
+    <div className="flex h-screen w-screen overflow-hidden bg-surface-canvas text-ink">
       <Sidebar />
-      <div className="min-h-screen lg:ml-20">
+      <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="mx-auto max-w-dashboard p-4 pb-24 lg:p-6">
+        <main className="flex-1 overflow-auto">
           <Outlet />
         </main>
       </div>

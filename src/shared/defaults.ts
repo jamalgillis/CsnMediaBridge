@@ -20,11 +20,15 @@ export const defaultSettings: AppSettings = {
   autoProgressiveMaxDurationSeconds: AUTO_PROGRESSIVE_MAX_DURATION_SECONDS,
   readyCheckIntervalMs: 2000,
   readyCheckStablePasses: 3,
+  storage: {
+    layout: 'canonical',
+  },
   b2: {
     bucket: '',
     pathPrefix: 'vod/archive',
     keyId: '',
     applicationKey: '',
+    s3Endpoint: '',
   },
   r2: {
     accountId: '',
@@ -36,7 +40,13 @@ export const defaultSettings: AppSettings = {
   },
   convex: {
     deploymentUrl: '',
-    mutationPath: 'videos:createVodEntry',
+    mutationPath: 'media/videos:createVodEntry',
+    nodeToken: '',
+  },
+  offload: {
+    localFolder: '',
+    b2PathPrefix: 'offloads',
+    localCopyMode: 'fast',
   },
   appUpdates: {
     enabled: Boolean(DEFAULT_APP_UPDATE_BASE_URL),

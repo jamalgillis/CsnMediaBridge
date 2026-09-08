@@ -7,7 +7,13 @@ import {
   type ReactNode,
 } from 'react';
 import { defaultSettings, initialBridgeState } from '../shared/defaults';
-import type { AppSettings, BridgeStateSnapshot } from '../shared/types';
+import type {
+  AppSettings,
+  BridgeStateSnapshot,
+  IngestUploadAuditSnapshot,
+  ManualIntakeRequest,
+  ManualIntakeSourceSnapshot,
+} from '../shared/types';
 
 interface BridgeContextValue {
   state: BridgeStateSnapshot;
@@ -22,7 +28,12 @@ interface BridgeContextValue {
   startWatching: () => Promise<void>;
   stopWatching: () => Promise<void>;
   browseDirectory: () => Promise<string | null>;
+  chooseManualIntakeSource: () => Promise<ManualIntakeSourceSnapshot | null>;
+  enqueueManualIntake: (request: ManualIntakeRequest) => Promise<void>;
   retryJob: (jobId: string) => Promise<void>;
+  auditJobUploads: (jobId: string) => Promise<IngestUploadAuditSnapshot>;
+  resumeJobUploads: (jobId: string) => Promise<void>;
+  cleanupJobUploads: (jobId: string) => Promise<IngestUploadAuditSnapshot>;
   refreshSystem: () => Promise<void>;
 }
 
@@ -150,11 +161,61 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         throw error;
       }
     },
+    chooseManualIntakeSource: async () => {
+      try {
+        const result = await window.mediaBridge.chooseManualIntakeSource();
+        setActionError(null);
+        return result;
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+        throw error;
+      }
+    },
+    enqueueManualIntake: async (request) => {
+      try {
+        const nextState = await window.mediaBridge.enqueueManualIntake(request);
+        setState(nextState);
+        setActionError(null);
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+        throw error;
+      }
+    },
     retryJob: async (jobId) => {
       try {
         const nextState = await window.mediaBridge.retryJob(jobId);
         setState(nextState);
         setActionError(null);
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+        throw error;
+      }
+    },
+    auditJobUploads: async (jobId) => {
+      try {
+        const audit = await window.mediaBridge.auditJobUploads(jobId);
+        setActionError(null);
+        return audit;
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+        throw error;
+      }
+    },
+    resumeJobUploads: async (jobId) => {
+      try {
+        const nextState = await window.mediaBridge.resumeJobUploads(jobId);
+        setState(nextState);
+        setActionError(null);
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+        throw error;
+      }
+    },
+    cleanupJobUploads: async (jobId) => {
+      try {
+        const audit = await window.mediaBridge.cleanupJobUploads(jobId);
+        setActionError(null);
+        return audit;
       } catch (error) {
         setActionError(getErrorMessage(error));
         throw error;

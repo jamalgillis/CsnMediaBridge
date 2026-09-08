@@ -1,7 +1,12 @@
 <!-- convex-ai-start -->
-This project uses [Convex](https://convex.dev) as its backend.
+This project has no Convex backend of its own.
 
-When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+The media pipeline's Convex schema and functions live in the CSN sports app at
+`Websites/csn/convex/`, under `convex/media/`, sharing one deployment with the
+sports site. This app is a client of it — see
+`docs/CONVEX_DEPLOYMENT_TOPOLOGY.md`.
 
-Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
+**Do not run `npx convex dev` or `npx convex deploy` from this repository.** A
+Convex deployment can be pushed to by exactly one codebase, and `deploy`
+replaces the entire function set.
 <!-- convex-ai-end -->

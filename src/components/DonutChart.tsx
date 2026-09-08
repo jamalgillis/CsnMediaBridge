@@ -38,7 +38,7 @@ export default function DonutChart({
             r={RADIUS}
             fill="none"
             strokeWidth="8"
-            className="stroke-slate-200 dark:stroke-surface-elevated"
+            className="stroke-white/[.08]"
           />
           {/* Segments */}
           {segments.map((segment) => {
@@ -66,8 +66,8 @@ export default function DonutChart({
         </svg>
         {/* Center text */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold text-slate-900 dark:text-white">{centerValue}</span>
-          <span className="text-xs font-medium text-slate-400 dark:text-slate-500">{centerLabel}</span>
+          <span className="font-mono text-[22px] font-semibold tracking-[-.02em] text-ink">{centerValue}</span>
+          <span className="mt-0.5 text-overline uppercase text-ink-dim">{centerLabel}</span>
         </div>
       </div>
 
@@ -76,10 +76,10 @@ export default function DonutChart({
         {segments.map((segment) => {
           const pct = total > 0 ? Math.round((segment.value / total) * 100) : 0;
           return (
-            <div key={segment.label} className="flex items-center gap-1.5 text-xs">
+            <div key={segment.label} className="flex items-center gap-1.5 text-caption">
               <span className={`inline-block h-2 w-2 rounded-full ${segment.colorClass}`} />
-              <span className="text-slate-500 dark:text-slate-400">
-                {pct}% {segment.label}
+              <span className="text-ink-muted">
+                <span className="font-mono">{pct}%</span> {segment.label}
               </span>
             </div>
           );

@@ -2,13 +2,15 @@
 
 This document explains each option on the `Settings` page in plain language.
 
-The goal of the page is simple: tell the app where to watch for finished videos, where to build distribution files, where to upload them, and how to notify your backend when a video is ready.
+The goal of the page is simple: tell the app where to watch for finished videos, where to build distribution files, where to store manual offloads, which still-image assets can go to the cloud, and how to notify your backend when a video is ready.
 
 ## What This Page Controls
 
 The settings page is split into five groups:
 
 - watch and working folders
+- manual offload storage
+- offload copy speed and verification
 - encoder and file-readiness behavior
 - Backblaze B2 archive storage
 - Cloudflare R2 streaming storage
@@ -20,6 +22,7 @@ Have these ready before filling out the page:
 
 - the folder where finished MP4 files will be dropped
 - a local folder with enough free disk space for processing
+- a local folder where full shoot offloads should be copied
 - your Backblaze B2 bucket name and credentials
 - your Cloudflare R2 bucket name and credentials
 - your Convex deployment URL
@@ -66,6 +69,56 @@ Best practice:
 - use a folder the app is allowed to write to
 
 Even though the setting says "temp," this is still real output written to disk during processing, so it is worth choosing a location you can manage easily.
+
+### Manual Offload Folder
+
+This is the base folder used by the `Offload` page.
+
+When you run a manual offload, the app creates a dated package here with:
+
+- a direct mirrored copy of the selected shoot folder in the package root
+- an optional `web-ready` folder containing converted `webp` images
+- an `offload-manifest.json` file that tracks checksums and completed steps
+- an `offload.log` file with a plain-text transfer history
+
+Important:
+
+- video files stay on this local drive
+- the Backblaze offload step uploads picture assets only
+- pause and resume reuse the same package when the source folder and offload label match
+
+Best practice:
+
+- choose a roomy local drive used for post-shoot handoff
+- keep it separate from the watcher inbox so the two workflows stay clean
+- make sure the app can create folders here
+
+### Offload Local Copy Mode
+
+This controls how the app verifies local original-file copies during a manual offload.
+
+Options:
+
+- `Fast Local Copy`: recommended for most post-shoot offloads
+- `Safe Checksum Copy`: slower, but stricter
+
+What `Fast Local Copy` means:
+
+- the app uses clone-friendly local copies when the drive supports them
+- it preserves the copied file's modified time
+- it decides whether a file can be reused by comparing file size and modified time
+- the manifest, log, pause, and resume behavior still stay in place
+
+What `Safe Checksum Copy` means:
+
+- the app reads full-file checksums for the source and copied file
+- it verifies the copy by comparing checksums
+- it is slower on first-pass offloads, especially with large videos
+
+Best practice:
+
+- use `Fast Local Copy` for normal field offloads and large post-shoot dumps
+- switch to `Safe Checksum Copy` when you specifically want the slowest but strictest local verification path
 
 ## Processing Settings
 
@@ -140,6 +193,51 @@ Best practice:
 - lower it if you want more videos pushed into HLS
 - raise it if you want more short-form clips delivered as direct files
 
+## Storage Layout
+
+This setting decides the folder structure the app writes inside both cloud buckets. It only affects *new* uploads — objects already in your buckets are never moved, and they stay reachable either way.
+
+### Canonical (lifecycle-aware)
+
+This is the recommended choice, and the default for a fresh install.
+
+New ingests are filed like this:
+
+- Backblaze B2: `masters/{project}/{date}/{asset key}/{original file name}`
+- Cloudflare R2: `streaming/vod/{asset key}/` for playback, `posters/{asset key}/` for thumbnails
+- Social renders: `staging/social/` while they wait, `scheduled/social/` once attached to a scheduled post
+
+The asset key is a short fingerprint of the source file's contents, so the same file always lands in the same folder no matter how many times it is retried or re-ingested.
+
+Why it matters: Cloudflare's automatic cleanup rules work on folder paths. Separating temporary social clips from permanent playback files is what lets short-lived clips expire on their own while your published videos stay put. Under this layout your R2 bill stays effectively at zero without anyone remembering to delete anything.
+
+### Legacy (flat path prefixes)
+
+The scheme the app used before the storage contract existed: everything goes under the `B2 Path Prefix` and `R2 Path Prefix` values you set below, in one flat folder per job.
+
+If you already have videos in your buckets, the app keeps you on this setting when it updates, so nothing changes without you choosing it. Cleanup rules cannot tell temporary clips from permanent ones under this layout, so plan to switch to canonical when convenient — switching only affects what gets written next.
+
+### B2 S3 Endpoint
+
+This is the address the app uses to generate temporary preview links for archived master files.
+
+Where to find it: in Backblaze, open your bucket and look for the **Endpoint** on the details panel. Add `https://` to the front.
+
+Example:
+
+- `https://s3.us-west-004.backblazeb2.com`
+
+What it is used for:
+
+- previewing an archived master in the Library without anyone logging into Backblaze
+- the "Retrieve for processing" button, which pulls the original back to your working folder
+
+What it is *not* used for: normal uploads and downloads, which use a different Backblaze connection and ignore this setting. If you leave it blank everything else still works — the two archive buttons in the Library will explain that it is missing.
+
+### B2 Path Prefix and R2 Path Prefix
+
+These two settings are used only by the legacy layout. They are kept, not deleted, when you switch to canonical, so your existing files stay reachable if you ever switch back.
+
 ## Backblaze B2 Settings
 
 This section is for archive storage.
@@ -178,6 +276,23 @@ If your bucket is the storage building, this setting is the shelf or folder path
 Best practice:
 
 - leave the default unless you already have a bucket structure you want to follow
+
+### Offload B2 Prefix
+
+This is the folder-style path the manual `Offload` page uses inside the same Backblaze B2 bucket for still-image uploads.
+
+Example:
+
+- `offloads`
+
+Plain-English version:
+
+- automatic ingest archives can live under one B2 prefix
+- manual post-shoot image uploads can live under another
+
+Best practice:
+
+- keep this separate from the normal ingest archive prefix so manual offloads stay easy to browse
 
 ## Cloudflare R2 Settings
 
@@ -248,15 +363,31 @@ This is the name of the backend action the app should call after the video is re
 
 The default is:
 
-- `videos:createVodEntry`
+- `media/videos:createVodEntry`
 
 Plain-English version:
 
 - this tells the app which "save this finished video" action to run in your backend
 
+The media functions live in a `media/` folder on the shared backend, which is why the path starts that way.
+
 Best practice:
 
 - do not change this unless your backend team gave you a different value
+
+### Ingest Node Token
+
+This is the credential that identifies this specific workstation to the shared backend.
+
+Why it exists: the app keeps working while nobody is signed in — it picks up jobs overnight and finishes uploads after everyone has gone home. So it identifies itself as a machine rather than borrowing a person's login, which would stop working the moment that person's session expired.
+
+What to do:
+
+- ask an administrator to issue a token for this workstation
+- paste it here; it is stored encrypted on this machine, the same way your cloud keys are
+- each workstation should get its own token, so a lost laptop can be shut off without disturbing anyone else
+
+Without it, the app can still transcode video locally, but it cannot register anything to the library or pick up render jobs.
 
 ## Watcher Setting
 
@@ -314,9 +445,10 @@ If you are setting up the app for the first time, these are safe starting points
 - `Hardware Encoder Override`: `Auto`
 - `Ready Check Interval (ms)`: `2000`
 - `Stable Passes`: `3`
-- `B2 Path Prefix`: `vod/archive`
-- `R2 Path Prefix`: `vod/hls`
-- `Convex Mutation Path`: `videos:createVodEntry`
+- `Storage Layout`: `Canonical (lifecycle-aware)`
+- `B2 Path Prefix`: `vod/archive` (only used by the legacy layout)
+- `R2 Path Prefix`: `vod/hls` (only used by the legacy layout)
+- `Convex Mutation Path`: `media/videos:createVodEntry`
 - `Auto-start watcher on launch`: the app defaults this to on, but it can be safer to switch it off until testing is complete
 
 ## Settings You Must Fill In Before Processing Works

@@ -1,6 +1,6 @@
 # CSN Media Bridge
 
-CSN Media Bridge is a cross-platform Electron desktop app for automated sports media ingest. It watches a folder for new video files, waits until each file is stable, automatically routes short-form clips to progressive playback and longer content to HLS, uploads the source and distribution assets with `rclone`, and then registers the finished playback metadata with Convex.
+CSN Media Bridge is a cross-platform Electron desktop app for automated sports media ingest and operator-facing VOD management. It watches a folder for new video files, waits until each file is stable, automatically routes short-form clips to progressive playback and longer content to HLS, uploads the source and distribution assets with `rclone`, and then registers the finished playback metadata with Convex. It also includes a Convex-backed library for search, metadata editing, publish control, and poster replacement, plus a manual Offload page for post-shoot folder handoff, local package creation on a designated drive, checksum-tracked `webp` image generation, and optional Backblaze B2 upload for still-image assets only.
 
 ## Documentation
 
@@ -8,7 +8,41 @@ CSN Media Bridge is a cross-platform Electron desktop app for automated sports m
 - First-time client setup: [`docs/CLIENT_FIRST_TIME_SETUP.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/CLIENT_FIRST_TIME_SETUP.md)
 - Settings guide: [`docs/SETTINGS_GUIDE.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/SETTINGS_GUIDE.md)
 - Feature guide: [`docs/FEATURES.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/FEATURES.md)
+- Convex deployment topology: [`docs/CONVEX_DEPLOYMENT_TOPOLOGY.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/CONVEX_DEPLOYMENT_TOPOLOGY.md)
+- Media pipeline architecture: [`docs/MEDIA_PIPELINE_ARCHITECTURE.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/MEDIA_PIPELINE_ARCHITECTURE.md)
+- Storage layout contract: [`docs/STORAGE_LAYOUT.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/STORAGE_LAYOUT.md)
+- Operator setup tasks: [`docs/OPERATOR_SETUP_TASKS.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/OPERATOR_SETUP_TASKS.md)
+- Execution roadmap: [`docs/EXECUTION_ROADMAP.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/EXECUTION_ROADMAP.md)
+- Product roadmap: [`docs/ROADMAP.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/ROADMAP.md)
+- Hybrid orchestration contract: [`docs/HYBRID_ORCHESTRATION.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/HYBRID_ORCHESTRATION.md)
+- Developer overview: [`docs/DEVELOPER_OVERVIEW.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/DEVELOPER_OVERVIEW.md)
+- Sales summary: [`docs/SALES_SUMMARY.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/SALES_SUMMARY.md)
+- Scope of work: [`docs/SCOPE_OF_WORK.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/SCOPE_OF_WORK.md)
 - Release guide: [`docs/RELEASING.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/RELEASING.md)
+
+## Developer Overview
+
+For a quick technical orientation, start with [`docs/DEVELOPER_OVERVIEW.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/DEVELOPER_OVERVIEW.md).
+
+At a high level, the app currently provides:
+
+- automated watch-folder ingest for new source videos
+- FFmpeg-based processing for progressive, HLS, poster, image conversion, and trim workflows
+- cloud transfer through Backblaze B2 and Cloudflare R2
+- Convex registration of finished media records
+- Convex-backed VOD library for search, filtering, metadata editing, publish controls, and poster replacement
+- manual offload of full shoot folders with resumable logging and optional image-only upload
+- built-in library preview and trimmer tools for operators
+
+## VOD Library Workflow
+
+The `/player` route now acts as a VOD library and management surface instead of a preview-only page.
+
+- Browse the full stored-video library from Convex instead of only ready assets.
+- Search and filter by title, source file, tags, playlists, series, and status.
+- Edit title, description, tags, playlists, series, recorded date, and status from the desktop app.
+- Publish and unpublish assets by moving them between `ready` and `draft`.
+- Generate poster-frame candidates from a stored playback asset, apply the selected poster back to Cloudflare R2, and sync the new poster URL to Convex.
 
 ## Stack
 
@@ -81,7 +115,10 @@ Set these values in the app Settings screen:
 
 - Watch folder
 - Temporary output folder
+- Manual offload folder
+- Offload local copy mode
 - Backblaze B2 bucket, key ID, application key, and archive prefix
+- Backblaze offload prefix for manual image uploads
 - Cloudflare R2 account ID, bucket, public base URL, access key, secret key, and distribution prefix
 - Convex deployment URL and mutation path
 - Optional app update feed base URL and check interval
@@ -115,6 +152,17 @@ The repo also includes a tag-driven GitHub Actions release workflow at [release.
 5. `rclone` copies the original source to Backblaze B2.
 6. `rclone` copies the distribution folder to Cloudflare R2.
 7. Convex receives the finished playback metadata, manifest URL when applicable, and progressive sources when applicable.
+
+## Manual Offload Workflow
+
+1. Open the `Offload` page and choose a shoot folder.
+2. The app copies the full folder into the configured offload destination as a dated package, mirroring the source directly in the package root.
+3. Each package includes an on-disk `offload-manifest.json` and `offload.log` so partial work can be referenced and resumed later.
+4. Local offloads use fast metadata-based copy by default so first-time packages land sooner, while a safe checksum mode is available in Settings when stricter local verification is preferred.
+5. When enabled, PNG and JPEG assets are mirrored into a `web-ready` folder as `webp` files for website use.
+6. When enabled, only still-image assets are uploaded to Backblaze B2 under the configured offload prefix.
+7. Video files remain local on the configured offload drive and are not uploaded.
+8. The offload page supports pause and cancel controls, and resuming the same source and label reuses the existing package instead of starting from scratch.
 
 ## Notes
 

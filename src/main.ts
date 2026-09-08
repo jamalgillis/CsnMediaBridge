@@ -54,12 +54,43 @@ function registerIpcHandlers(controller: BridgeController) {
   ipcMain.handle(IPC_CHANNELS.startWatching, async () => controller.startWatching());
   ipcMain.handle(IPC_CHANNELS.stopWatching, async () => controller.stopWatching());
   ipcMain.handle(IPC_CHANNELS.browseDirectory, async () => controller.browseDirectory());
+  ipcMain.handle(IPC_CHANNELS.chooseManualIntakeSource, async () => controller.chooseManualIntakeSource());
+  ipcMain.handle(IPC_CHANNELS.enqueueManualIntake, async (_event, request) =>
+    controller.enqueueManualIntake(request));
   ipcMain.handle(IPC_CHANNELS.retryJob, async (_event, jobId: string) => controller.retryJob(jobId));
+  ipcMain.handle(IPC_CHANNELS.auditJobUploads, async (_event, jobId: string) =>
+    controller.auditJobUploads(jobId));
+  ipcMain.handle(IPC_CHANNELS.resumeJobUploads, async (_event, jobId: string) =>
+    controller.resumeJobUploads(jobId));
+  ipcMain.handle(IPC_CHANNELS.cleanupJobUploads, async (_event, jobId: string) =>
+    controller.cleanupJobUploads(jobId));
   ipcMain.handle(IPC_CHANNELS.refreshSystem, async () => controller.refreshSystem());
   ipcMain.handle(IPC_CHANNELS.listStoredVideos, async () => controller.listStoredVideos());
+  ipcMain.handle(IPC_CHANNELS.updateStoredVideoMetadata, async (_event, request) =>
+    controller.updateStoredVideoMetadata(request));
+  ipcMain.handle(IPC_CHANNELS.deleteStoredVideo, async (_event, request) =>
+    controller.deleteStoredVideo(request));
   ipcMain.handle(IPC_CHANNELS.repairStoredVideoUrls, async () => controller.repairStoredVideoUrls());
+  ipcMain.handle(IPC_CHANNELS.generateStoredVideoPosterCandidates, async (_event, request) =>
+    controller.generateStoredVideoPosterCandidates(request));
+  ipcMain.handle(IPC_CHANNELS.applyStoredVideoPoster, async (_event, request) =>
+    controller.applyStoredVideoPoster(request));
+  ipcMain.handle(IPC_CHANNELS.getArchivePreviewUrl, async (_event, request) =>
+    controller.getArchivePreviewUrl(request),
+  );
+  ipcMain.handle(IPC_CHANNELS.retrieveArchivedMaster, async (_event, request) =>
+    controller.retrieveArchivedMaster(request),
+  );
   ipcMain.handle(IPC_CHANNELS.chooseTrimSource, async () => controller.chooseTrimSource());
   ipcMain.handle(IPC_CHANNELS.trimClip, async (_event, request) => controller.trimClip(request));
+  ipcMain.handle(IPC_CHANNELS.listClipsForVideo, async (_event, sourceVideoId: string) =>
+    controller.listClipsForVideo(sourceVideoId));
+  ipcMain.handle(IPC_CHANNELS.chooseOffloadSource, async () => controller.chooseOffloadSource());
+  ipcMain.handle(IPC_CHANNELS.getOffloadTask, async () => controller.getOffloadTask());
+  ipcMain.handle(IPC_CHANNELS.runOffloadTask, async (_event, request) => controller.runOffloadTask(request));
+  ipcMain.handle(IPC_CHANNELS.pauseOffloadTask, async () => controller.pauseOffloadTask());
+  ipcMain.handle(IPC_CHANNELS.cancelOffloadTask, async () => controller.cancelOffloadTask());
+  ipcMain.handle(IPC_CHANNELS.getStorageUsage, async () => controller.getStorageUsage());
 }
 
 app.on('ready', async () => {

@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import GlassCard from './GlassCard';
 
 interface MetricCardProps {
   label: string;
@@ -9,22 +8,28 @@ interface MetricCardProps {
 }
 
 export default function MetricCard({ label, value, detail, accent }: MetricCardProps) {
+  // Spool runs every count, size and timecode in mono; words stay in the UI face.
+  const isNumeric = /^[\d.,:%\s/]+$/.test(value);
+
   return (
-    <GlassCard className="overflow-hidden">
+    <div className="spool-card overflow-hidden p-[18px]">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-widest text-slate-400 dark:text-slate-500">
-            {label}
-          </p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+        <div className="min-w-0">
+          <p className="text-overline uppercase text-ink-dim">{label}</p>
+          {/* Metric values read as machine output, so they run in mono. */}
+          <p
+            className={`mt-2.5 truncate text-[26px] font-semibold tracking-[-.02em] text-ink ${
+              isNumeric ? 'font-mono' : ''
+            }`}
+          >
             {value}
           </p>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{detail}</p>
+          <p className="mt-2 text-caption leading-relaxed text-ink-muted">{detail}</p>
         </div>
-        <div className="rounded-widget border border-surface-light-border bg-primary-400/10 p-3 text-primary-500 dark:border-surface-border dark:text-primary-400">
+        <div className="flex-none rounded-control bg-primary-500/[.13] p-2.5 text-primary-200">
           {accent}
         </div>
       </div>
-    </GlassCard>
+    </div>
   );
 }

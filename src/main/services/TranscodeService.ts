@@ -3,6 +3,7 @@ import path from 'node:path';
 import ffmpeg from 'fluent-ffmpeg';
 import {
   clamp,
+  createId,
   detectPipelineError,
   isHardwareAccelerationFailure,
   parseTimemarkToSeconds,
@@ -15,6 +16,7 @@ import {
 import { sortStoredVideoSources } from '../../shared/media';
 import type {
   AppSettings,
+  ClipAspectRatio,
   DeliveryType,
   EffectiveHardwareEncoder,
   LogLevel,
@@ -45,8 +47,28 @@ interface TrimClipTask {
   onLog: (message: string) => void;
 }
 
+interface ClipReframeTask {
+  sourcePath: string;
+  outputDirectory: string;
+  inPointSeconds: number;
+  outPointSeconds: number;
+  aspectRatio: ClipAspectRatio;
+  settings: AppSettings;
+  probe?: SourceProbe;
+  onLog: (message: string) => void;
+}
+
+interface PosterCandidateTask {
+  sourcePath: string;
+  outputDirectory: string;
+  durationSeconds: number;
+  onLog: (message: string) => void;
+}
+
 interface ProbeStream {
   codec_type?: string;
+  codec_name?: string;
+  codec_long_name?: string;
   avg_frame_rate?: string;
   r_frame_rate?: string;
   width?: number;
@@ -68,6 +90,8 @@ export interface SourceProbe {
   frameRate: number;
   width: number | null;
   height: number | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
 }
 
 interface PackagedSourceDescriptor {
@@ -82,6 +106,8 @@ export interface PackagedVideoResult {
   frameRate: number;
   width: number | null;
   height: number | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
   posterPath: string | null;
   masterPlaylistPath: string | null;
   manifestRelativePath: string | null;
@@ -95,6 +121,14 @@ export interface TrimClipResult {
   effectiveEncoder: EffectiveHardwareEncoder;
 }
 
+
+export interface StoredVideoPosterCandidateResult {
+  id: string;
+  label: string;
+  localPath: string;
+  timestampSeconds: number;
+}
+
 interface HlsVariantDefinition {
   label: string;
   width: number;
@@ -104,7 +138,7 @@ interface HlsVariantDefinition {
   bufsize: string;
 }
 
-const HLS_SEGMENT_DURATION_SECONDS = 4;
+const HLS_SEGMENT_DURATION_SECONDS = 2;
 const PROGRESSIVE_H264_FILENAME = 'playback-h264.mp4';
 const PROGRESSIVE_AV1_FILENAME = 'playback-av1.webm';
 const HLS_VARIANTS: HlsVariantDefinition[] = [
@@ -161,6 +195,10 @@ function parseFrameRate(rate: string | undefined) {
   return Number((numerator / denominator).toFixed(3));
 }
 
+function getCodecName(stream: ProbeStream | undefined) {
+  return stream?.codec_name?.trim() || stream?.codec_long_name?.trim() || null;
+}
+
 function probeSource(sourcePath: string) {
   return new Promise<SourceProbe>((resolve, reject) => {
     ffmpeg.ffprobe(sourcePath, (error: Error | null, metadata: ProbeMetadata) => {
@@ -172,6 +210,7 @@ function probeSource(sourcePath: string) {
       const streams = Array.isArray(metadata.streams) ? metadata.streams : [];
       const hasAudio = streams.some((stream) => stream.codec_type === 'audio');
       const videoStream = streams.find((stream) => stream.codec_type === 'video');
+      const audioStream = streams.find((stream) => stream.codec_type === 'audio');
 
       resolve({
         durationSeconds: Number(metadata.format?.duration ?? 0),
@@ -179,6 +218,8 @@ function probeSource(sourcePath: string) {
         frameRate: parseFrameRate(videoStream?.avg_frame_rate ?? videoStream?.r_frame_rate),
         width: typeof videoStream?.width === 'number' ? videoStream.width : null,
         height: typeof videoStream?.height === 'number' ? videoStream.height : null,
+        videoCodec: getCodecName(videoStream),
+        audioCodec: getCodecName(audioStream),
       });
     });
   });
@@ -259,6 +300,30 @@ function buildProgressiveScaleFilter() {
   return 'scale=w=1920:h=1080:force_original_aspect_ratio=decrease';
 }
 
+function getCanonicalClipDimensions(aspectRatio: ClipAspectRatio) {
+  switch (aspectRatio) {
+    case '9:16':
+      return { width: 1080, height: 1920 };
+    case '1:1':
+      return { width: 1080, height: 1080 };
+    case '4:5':
+      return { width: 1080, height: 1350 };
+    case '16:9':
+    default:
+      return { width: 1920, height: 1080 };
+  }
+}
+
+function buildReframeFilters(aspectRatio: ClipAspectRatio) {
+  const { width, height } = getCanonicalClipDimensions(aspectRatio);
+
+  return [
+    `crop=w='min(iw,ih*${width}/${height})':h='min(ih,iw*${height}/${width})':x='(iw-ow)/2':y='(ih-oh)/2'`,
+    `scale=${width}:${height}`,
+    'setsar=1',
+  ];
+}
+
 function buildHlsScaleFilters() {
   return [
     `[0:v]split=${HLS_VARIANTS.length}${HLS_VARIANTS.map((variant) => `[v${variant.label}src]`).join('')}`,
@@ -272,6 +337,37 @@ function buildHlsScaleFilters() {
 function getHlsKeyframeInterval(frameRate: number) {
   const normalizedFrameRate = frameRate > 0 ? frameRate : 30;
   return Math.max(24, Math.round(normalizedFrameRate * HLS_SEGMENT_DURATION_SECONDS));
+}
+
+function buildPosterCandidateTimes(durationSeconds: number) {
+  const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0
+    ? durationSeconds
+    : 12;
+  const fractions = [0.12, 0.32, 0.56, 0.82];
+  const timestamps = fractions.map((fraction) =>
+    Math.max(0.25, Number((safeDuration * fraction).toFixed(2))),
+  );
+
+  return Array.from(
+    new Set(
+      timestamps.map((timestampSeconds) =>
+        Math.min(timestampSeconds, Math.max(0.25, Number((safeDuration - 0.25).toFixed(2)))),
+      ),
+    ),
+  ).sort((left, right) => left - right);
+}
+
+function formatPosterCandidateLabel(timestampSeconds: number) {
+  const totalSeconds = Math.max(0, Math.round(timestampSeconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export class TranscodeService {
@@ -343,6 +439,60 @@ export class TranscodeService {
       );
       return await this.executeTrim(task, getSoftwareEncoderRuntime());
     }
+  }
+
+  async reframeClip(task: ClipReframeTask): Promise<PackagedVideoResult> {
+    const preferredRuntime = resolveEncoderRuntime(task.settings);
+
+    try {
+      return await this.executeReframe(task, preferredRuntime);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        !task.settings.autoFallbackToSoftware ||
+        preferredRuntime.effectiveEncoder === 'software' ||
+        !isHardwareAccelerationFailure(message)
+      ) {
+        throw error;
+      }
+
+      task.onLog(
+        `Hardware clip export failed with ${preferredRuntime.effectiveEncoder}. Retrying with software libx264.`,
+      );
+      return await this.executeReframe(task, getSoftwareEncoderRuntime());
+    }
+  }
+
+  async generatePosterCandidates(task: PosterCandidateTask): Promise<StoredVideoPosterCandidateResult[]> {
+    await rm(task.outputDirectory, { recursive: true, force: true });
+    await mkdir(task.outputDirectory, { recursive: true });
+
+    const candidates: StoredVideoPosterCandidateResult[] = [];
+    const candidateTimes = buildPosterCandidateTimes(task.durationSeconds);
+
+    for (const [index, timestampSeconds] of candidateTimes.entries()) {
+      const outputPath = path.join(task.outputDirectory, `poster-candidate-${index + 1}.jpg`);
+      const command = ffmpeg(task.sourcePath)
+        .seekInput(timestampSeconds)
+        .frames(1)
+        .output(outputPath)
+        .outputOptions('-q:v', '2');
+
+      await this.runFfmpegCommand({
+        command,
+        durationSeconds: 0,
+        onLog: task.onLog,
+      });
+
+      candidates.push({
+        id: createId(),
+        label: formatPosterCandidateLabel(timestampSeconds),
+        localPath: outputPath,
+        timestampSeconds,
+      });
+    }
+
+    return candidates;
   }
 
   private emitQueueChange() {
@@ -438,6 +588,72 @@ export class TranscodeService {
 
     return {
       durationSeconds: clipDurationSeconds,
+      effectiveEncoder: runtime.effectiveEncoder,
+    };
+  }
+
+  private async executeReframe(
+    task: ClipReframeTask,
+    runtime: EncoderRuntimeConfig,
+  ): Promise<PackagedVideoResult> {
+    const clipDurationSeconds = Number((task.outPointSeconds - task.inPointSeconds).toFixed(3));
+    const { width, height } = getCanonicalClipDimensions(task.aspectRatio);
+    const probe = task.probe ?? (await probeSource(task.sourcePath));
+
+    await rm(task.outputDirectory, { recursive: true, force: true });
+    await mkdir(task.outputDirectory, { recursive: true });
+
+    const outputPath = path.join(task.outputDirectory, PROGRESSIVE_H264_FILENAME);
+
+    task.onLog(`Exporting ${task.aspectRatio} clip with ${runtime.effectiveEncoder}.`);
+
+    const command = ffmpeg(task.sourcePath)
+      .inputOptions(runtime.inputOptions)
+      .output(outputPath)
+      .seek(task.inPointSeconds)
+      .duration(clipDurationSeconds)
+      .videoFilters(buildReframeFilters(task.aspectRatio))
+      .outputOptions(
+        '-map',
+        '0:v:0',
+        ...(probe.hasAudio ? ['-map', '0:a:0?'] : []),
+        ...getTrimOutputOptions(runtime),
+        ...(probe.hasAudio ? ['-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k'] : []),
+        '-movflags',
+        '+faststart',
+        '-pix_fmt',
+        'yuv420p',
+      );
+
+    await this.runFfmpegCommand({
+      command,
+      durationSeconds: clipDurationSeconds,
+      onLog: task.onLog,
+    });
+
+    const posterPath = task.settings.extractPosterFrame
+      ? await this.extractPosterAt(outputPath, task.outputDirectory, clipDurationSeconds / 2, task.onLog)
+      : null;
+
+    return {
+      deliveryType: 'progressive',
+      durationSeconds: clipDurationSeconds,
+      frameRate: probe.frameRate,
+      width,
+      height,
+      videoCodec: 'h264',
+      audioCodec: probe.hasAudio ? 'aac' : null,
+      posterPath,
+      masterPlaylistPath: null,
+      manifestRelativePath: null,
+      playbackRelativePath: PROGRESSIVE_H264_FILENAME,
+      sources: [
+        {
+          codec: 'h264',
+          mimeType: 'video/mp4',
+          relativePath: PROGRESSIVE_H264_FILENAME,
+        },
+      ],
       effectiveEncoder: runtime.effectiveEncoder,
     };
   }
@@ -546,6 +762,8 @@ export class TranscodeService {
       frameRate: probe.frameRate,
       width: probe.width,
       height: probe.height,
+      videoCodec: probe.videoCodec,
+      audioCodec: probe.audioCodec,
       posterPath,
       masterPlaylistPath,
       manifestRelativePath: 'master.m3u8',
@@ -629,6 +847,8 @@ export class TranscodeService {
       frameRate: probe.frameRate,
       width: probe.width,
       height: probe.height,
+      videoCodec: probe.videoCodec,
+      audioCodec: probe.audioCodec,
       posterPath,
       masterPlaylistPath: null,
       manifestRelativePath: null,
@@ -712,6 +932,28 @@ export class TranscodeService {
       task.onLog(
         `Poster extraction skipped: ${error instanceof Error ? error.message : String(error)}`,
       );
+      return null;
+    }
+  }
+
+  private async extractPosterAt(
+    sourcePath: string,
+    outputDirectory: string,
+    timestampSeconds: number,
+    onLog: (message: string) => void,
+  ) {
+    const posterPath = path.join(outputDirectory, 'poster.jpg');
+    const command = ffmpeg(sourcePath)
+      .seekInput(Math.max(0, timestampSeconds))
+      .frames(1)
+      .output(posterPath)
+      .outputOptions('-q:v', '2');
+
+    try {
+      await this.runFfmpegCommand({ command, durationSeconds: 0, onLog });
+      return posterPath;
+    } catch (error) {
+      onLog(`Poster extraction skipped: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }

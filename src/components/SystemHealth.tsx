@@ -4,9 +4,9 @@ import DonutChart from './DonutChart';
 import { useBridge } from '../context/BridgeContext';
 
 const resourceSegments = [
-  { label: 'Encode', value: 55, colorClass: 'bg-primary-400', strokeColor: '#22d3ee' },
-  { label: 'Upload', value: 35, colorClass: 'bg-secondary-400', strokeColor: '#34d399' },
-  { label: 'Idle', value: 10, colorClass: 'bg-slate-400', strokeColor: '#94a3b8' },
+  { label: 'Encode', value: 55, colorClass: 'bg-primary-500', strokeColor: '#0e79b2' },
+  { label: 'Upload', value: 35, colorClass: 'bg-secondary-500', strokeColor: '#748b75' },
+  { label: 'Idle', value: 10, colorClass: 'bg-ink-muted', strokeColor: '#5c6573' },
 ];
 
 export default function SystemHealth() {
@@ -85,18 +85,14 @@ export default function SystemHealth() {
     <GlassCard className="col-span-full xl:col-span-4">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">System Health</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          <h2 className="text-section text-ink">System Health</h2>
+          <p className="mt-1 text-sm text-ink-muted">
             Resource allocation and pipeline readiness.
           </p>
         </div>
         <button
           onClick={() => void refreshSystem()}
-          className="rounded-widget border border-surface-light-border bg-surface-light-elevated
-            px-3 py-2 text-xs font-semibold uppercase tracking-widest text-slate-600
-            transition hover:bg-slate-200
-            dark:border-surface-border dark:bg-surface-elevated dark:text-slate-200
-            dark:hover:bg-surface-card"
+          className="rounded-control border px-3 py-2 text-overline uppercase transition border-surface-hairline bg-surface-elevated text-ink-strong hover:bg-surface-card"
         >
           Refresh
         </button>
@@ -115,20 +111,19 @@ export default function SystemHealth() {
       <div className="space-y-5">
         {/* Runtime checks */}
         <div>
-          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <p className="mb-3 text-overline uppercase text-ink-dim">
             Runtime
           </p>
           <div className="space-y-3">
             {binaryChecks.map((item) => (
               <div
                 key={item.label}
-                className="rounded-widget border border-surface-light-border bg-surface-light-elevated p-4
-                  dark:border-surface-border dark:bg-surface-deep"
+                className="rounded-control border p-4 border-surface-hairline bg-surface-canvas"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-slate-800 dark:text-white">{item.label}</p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{item.detail}</p>
+                    <p className="font-medium text-ink">{item.label}</p>
+                    <p className="mt-1 text-sm text-ink-muted">{item.detail}</p>
                   </div>
                   <StatusBadge tone={item.ready ? 'good' : 'danger'}>
                     {item.ready ? 'Ready' : 'Missing'}
@@ -141,20 +136,19 @@ export default function SystemHealth() {
 
         {/* Config checks */}
         <div>
-          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <p className="mb-3 text-overline uppercase text-ink-dim">
             Configuration
           </p>
           <div className="space-y-3">
             {configChecks.map((item) => (
               <div
                 key={item.label}
-                className="rounded-widget border border-surface-light-border bg-surface-light-elevated p-4
-                  dark:border-surface-border dark:bg-surface-deep"
+                className="rounded-control border p-4 border-surface-hairline bg-surface-canvas"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-slate-800 dark:text-white">{item.label}</p>
-                    <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
+                    <p className="font-medium text-ink">{item.label}</p>
+                    <p className="mt-1 truncate text-sm text-ink-muted">
                       {item.detail}
                     </p>
                   </div>
@@ -168,20 +162,19 @@ export default function SystemHealth() {
         </div>
 
         <div>
-          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <p className="mb-3 text-overline uppercase text-ink-dim">
             Service Status
           </p>
           <div className="space-y-3">
             {serviceChecks.map((item) => (
               <div
                 key={item.label}
-                className="rounded-widget border border-surface-light-border bg-surface-light-elevated p-4
-                  dark:border-surface-border dark:bg-surface-deep"
+                className="rounded-control border p-4 border-surface-hairline bg-surface-canvas"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-slate-800 dark:text-white">{item.label}</p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{item.detail}</p>
+                    <p className="font-medium text-ink">{item.label}</p>
+                    <p className="mt-1 text-sm text-ink-muted">{item.detail}</p>
                   </div>
                   <StatusBadge
                     tone={
@@ -197,7 +190,7 @@ export default function SystemHealth() {
         </div>
 
         {state.system.notes.length > 0 && (
-          <div className="rounded-widget border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-700 dark:text-amber-200">
+          <div className="rounded-control border border-state-processing/30 bg-state-processing/[.12] p-4 text-sm text-amber-200">
             {state.system.notes.join(' ')}
           </div>
         )}

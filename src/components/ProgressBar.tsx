@@ -5,24 +5,19 @@ interface ProgressBarProps {
 }
 
 export default function ProgressBar({ label, value, variant }: ProgressBarProps) {
-  const barColor =
-    variant === 'primary'
-      ? 'bg-primary-400'
-      : 'bg-secondary-400';
+  const barColor = variant === 'primary' ? 'bg-primary-500' : 'bg-secondary-500';
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-medium uppercase tracking-widest text-slate-400 dark:text-slate-500">
-          {label}
-        </span>
-        <span className="font-semibold text-slate-700 dark:text-slate-100">
+      <div className="flex items-center justify-between">
+        <span className="text-overline uppercase text-ink-dim">{label}</span>
+        <span className="font-mono text-count font-semibold text-ink-strong">
           {Math.round(value)}%
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-surface-elevated">
+      <div className="h-1.5 w-full overflow-hidden rounded-[4px] bg-white/[.08]">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          className={`h-full rounded-[4px] transition-all duration-500 ${barColor}`}
           style={{ width: `${value}%` }}
         />
       </div>

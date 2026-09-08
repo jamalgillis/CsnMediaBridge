@@ -6,18 +6,7 @@ interface GlassCardProps {
   padded?: boolean;
 }
 
+/** The standard Spool card: hairline border on the card surface, 13px radius. */
 export default function GlassCard({ children, className = '', padded = true }: GlassCardProps) {
-  return (
-    <div
-      className={`
-        rounded-card
-        border border-surface-light-border bg-surface-light-card shadow-card-light shadow-glow-light
-        dark:border-surface-border dark:bg-surface-card dark:shadow-card dark:shadow-glow
-        ${padded ? 'p-6' : ''}
-        ${className}
-      `}
-    >
-      {children}
-    </div>
-  );
+  return <div className={`spool-card ${padded ? 'p-5' : ''} ${className}`}>{children}</div>;
 }
