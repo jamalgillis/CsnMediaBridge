@@ -61,7 +61,10 @@ rm -rf convex
 
 echo "==> Neutralizing Convex entries in .env.local"
 if [[ -f .env.local ]]; then
-  cp .env.local ".env.local.bak-$STAMP"
+  # Written outside the repo. A backup named `.env.local.bak-*` inside it does
+  # not match the `.env.local` gitignore entry and gets committed.
+  ENV_BACKUP="$HOME/csn-media-bridge-env-local-$STAMP.bak"
+  cp .env.local "$ENV_BACKUP"
   # Commented rather than deleted: the values are the only local record of which
   # deployment this app used to point at, and a commented line explains itself
   # to whoever finds it next.
@@ -92,7 +95,7 @@ for line in lines:
 with open(path, "w") as handle:
     handle.writelines(out)
 PY
-  echo "    backup at .env.local.bak-$STAMP"
+  echo "    backup at $ENV_BACKUP"
 else
   echo "    no .env.local — skipped"
 fi
