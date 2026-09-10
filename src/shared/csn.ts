@@ -1,15 +1,15 @@
 /**
- * Spool visual helpers shared by the renderer.
+ * CSN v2 visual helpers shared by the renderer.
  *
- * Thumbnails in the Spool design are CSS gradients keyed to a per-asset hue —
- * there are no external images. We derive a stable hue from the asset id so a
- * given asset always renders the same color.
+ * The site draws artwork it does not have as a `MediaSlot`: the `tile` surface
+ * under a faint diagonal hatch, with an uppercase caption in `ghost`. We use the
+ * same treatment for assets without a poster, so a bare thumbnail here reads the
+ * same as a bare thumbnail on csnsports.tv.
  */
 
-/** The prototype's thumbnail gradient, verbatim. */
-export function hueGradient(hue: number) {
-  return `radial-gradient(128% 112% at 28% 16%, hsl(${hue} 60% 33%), hsl(${(hue + 34) % 360} 54% 13%) 72%)`;
-}
+/** The site's MediaSlot hatch (components/site/media-slot.tsx), verbatim. */
+export const MEDIA_HATCH =
+  'repeating-linear-gradient(135deg, rgba(255,255,255,.022) 0 12px, transparent 12px 24px)';
 
 /**
  * Stable 0–359 hue from any identifier. Uses FNV-1a then spreads the result
@@ -26,11 +26,16 @@ export function hueFor(seed: string | undefined | null) {
   return Math.round(((hash % 1000) / 1000) * 137.508 * 8) % 360;
 }
 
-export function thumbGradientFor(seed: string | undefined | null) {
-  return hueGradient(hueFor(seed));
+/**
+ * Collection swatch. The palette is monochrome plus red, so these stay low
+ * chroma — enough to tell two collections apart in the rail, not enough to read
+ * as a second brand color.
+ */
+export function swatchFor(seed: string | undefined | null) {
+  return `hsl(${hueFor(seed)} 22% 46%)`;
 }
 
-/** Duration in seconds → `m:ss` or `h:mm:ss`, matching the prototype's mono timecodes. */
+/** Duration in seconds → `m:ss` or `h:mm:ss`. Set in tabular figures. */
 export function formatTimecode(totalSeconds: number) {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
     return '0:00';

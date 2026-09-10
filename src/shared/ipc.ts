@@ -3,6 +3,8 @@ export const IPC_CHANNELS = {
   getState: 'media-bridge:get-state',
   loadSettings: 'media-bridge:load-settings',
   saveSettings: 'media-bridge:save-settings',
+  importConnectionProfile: 'media-bridge:import-connection-profile',
+  exportConnectionProfile: 'media-bridge:export-connection-profile',
   checkForAppUpdates: 'media-bridge:check-for-app-updates',
   installAppUpdate: 'media-bridge:install-app-update',
   startWatching: 'media-bridge:start-watching',
@@ -33,4 +35,7 @@ export const IPC_CHANNELS = {
   cancelOffloadTask: 'media-bridge:cancel-offload-task',
   offloadUpdated: 'media-bridge:offload-updated',
   getStorageUsage: 'media-bridge:get-storage-usage',
+  listLiveStreamHandoffJobs: 'media-bridge:list-live-stream-handoff-jobs',
+  wakeLiveStreamHandoffWorker: 'media-bridge:wake-live-stream-handoff-worker',
+  liveStreamHandoffUpdated: 'media-bridge:live-stream-handoff-updated',
 } as const;

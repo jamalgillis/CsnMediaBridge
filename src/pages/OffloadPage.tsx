@@ -70,18 +70,18 @@ function ToggleCard({
 }) {
   return (
     <label
-      className="flex items-start gap-3 rounded-control border p-4 border-surface-hairline bg-surface-canvas"
+      className="flex items-start gap-3 rounded-control border p-4 border-rule bg-ink"
     >
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
         disabled={disabled}
-        className="mt-1 h-4 w-4 rounded text-primary-200 focus:ring-primary-400 disabled:cursor-not-allowed disabled:opacity-60 border-surface-hairline bg-transparent"
+        className="mt-1 h-4 w-4 rounded text-accent-hi focus:ring-accent-hi disabled:cursor-not-allowed disabled:opacity-60 border-rule bg-transparent"
       />
       <span>
-        <span className="block font-medium text-ink">{title}</span>
-        <span className="mt-1 block text-sm text-ink-muted">
+        <span className="block font-medium text-paper">{title}</span>
+        <span className="mt-1 block text-sm text-muted">
           {description}
         </span>
       </span>
@@ -89,7 +89,7 @@ function ToggleCard({
   );
 }
 
-const INPUT_CLASS = 'spool-input h-11';
+const INPUT_CLASS = 'csn-input h-11';
 
 export default function OffloadPage() {
   const { settings, state } = useBridge();
@@ -246,8 +246,8 @@ export default function OffloadPage() {
       <div className="mb-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <h1 className="text-page text-ink">Offload</h1>
-            <p className="mt-1.5 text-body text-ink-muted">
+            <h1 className="font-display text-page text-paper">Offload</h1>
+            <p className="mt-1.5 text-copy text-muted">
               Pick a post-shoot folder, copy the full shoot to your designated local drive, generate
               a parallel `web-ready` set of `webp` images for website use, and optionally upload only
               the picture assets to Backblaze B2. Video files always stay local in the copied package.
@@ -266,7 +266,7 @@ export default function OffloadPage() {
               type="button"
               onClick={() => void handleChooseSource()}
               disabled={isPickingSource || isSubmitting || isTaskRunning}
-              className="spool-btn-primary"
+              className="csn-btn-primary"
             >
               {isPickingSource ? 'Opening Browser…' : source ? 'Choose Another Folder' : 'Choose Shoot Folder'}
             </button>
@@ -274,7 +274,7 @@ export default function OffloadPage() {
               type="button"
               onClick={() => void handlePauseOffload()}
               disabled={!isTaskRunning}
-              className="spool-btn-secondary"
+              className="csn-btn-secondary"
             >
               Pause
             </button>
@@ -282,7 +282,7 @@ export default function OffloadPage() {
               type="button"
               onClick={() => void handleCancelOffload()}
               disabled={!isTaskRunning}
-              className="spool-btn-danger"
+              className="csn-btn-danger"
             >
               Cancel
             </button>
@@ -291,8 +291,8 @@ export default function OffloadPage() {
 
         {(notice || pageError) && (
           <div className="mt-4 space-y-2">
-            {notice && <p className="text-body text-secondary-300">{notice}</p>}
-            {pageError && <p className="text-body text-state-danger">{pageError}</p>}
+            {notice && <p className="text-copy text-state-ok">{notice}</p>}
+            {pageError && <p className="text-copy text-state-danger">{pageError}</p>}
           </div>
         )}
       </div>
@@ -301,29 +301,29 @@ export default function OffloadPage() {
         <GlassCard className="xl:col-span-8">
           <div className="flex flex-col gap-6">
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-control border p-4 border-surface-hairline bg-surface-canvas">
-                <p className="text-overline uppercase text-ink-dim">
+              <div className="rounded-control border p-4 border-rule bg-ink">
+                <p className="font-condensed text-overline uppercase text-dim">
                   Selected Source
                 </p>
-                <p className="mt-3 text-section text-ink">
+                <p className="mt-3 font-display text-section text-paper">
                   {source?.sourceName ?? 'No folder selected'}
                 </p>
-                <p className="mt-2 text-sm text-ink-muted">
+                <p className="mt-2 text-sm text-muted">
                   {source?.sourcePath ?? 'Choose a folder from a camera card, shuttle drive, or local shoot archive.'}
                 </p>
               </div>
 
-              <div className="rounded-control border p-4 border-surface-hairline bg-surface-canvas">
-                <p className="text-overline uppercase text-ink-dim">
+              <div className="rounded-control border p-4 border-rule bg-ink">
+                <p className="font-condensed text-overline uppercase text-dim">
                   Destination
                 </p>
-                <p className="mt-3 text-section text-ink">
+                <p className="mt-3 font-display text-section text-paper">
                   {settings.offload.localFolder || 'Configure in Settings'}
                 </p>
-                <p className="mt-2 text-sm text-ink-muted">
+                <p className="mt-2 text-sm text-muted">
                   Full packages mirror the selected source directly inside the dated offload bundle, with an optional `web-ready/` folder for converted images. Video files stay in that clean copied structure and are not sent to the cloud.
                 </p>
-                <p className="mt-2 text-sm text-ink-muted">
+                <p className="mt-2 text-sm text-muted">
                   Local copy mode:{' '}
                   {settings.offload.localCopyMode === 'fast'
                     ? 'Fast metadata copy'
@@ -334,7 +334,7 @@ export default function OffloadPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-overline uppercase text-ink-dim">
+              <label className="mb-2 block font-condensed text-overline uppercase text-dim">
                 Offload Label
               </label>
               <input
@@ -343,7 +343,7 @@ export default function OffloadPage() {
                 placeholder="Championship postgame shoot"
                 className={INPUT_CLASS}
               />
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className="mt-2 text-sm text-muted">
                 This label names the generated local package folder and the image-only cloud prefix.
               </p>
             </div>
@@ -365,7 +365,7 @@ export default function OffloadPage() {
               />
             </div>
 
-            <div className="rounded-control border border-primary-500/40 p-4 text-sm bg-primary-500/[.13] text-primary-200">
+            <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
               {settings.offload.localFolder
                 ? `Video files and full local packages will be written under ${settings.offload.localFolder}.`
                 : 'Set an offload destination folder in Settings before you start.'}
@@ -379,15 +379,15 @@ export default function OffloadPage() {
                 : ''}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-surface-hairline">
-              <div className="text-sm text-ink-muted">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-rule">
+              <div className="text-sm text-muted">
                 {imageSummary} {source ? `Source size: ${formatFileSize(source.totalBytes)}.` : ''}
               </div>
               <button
                 type="button"
                 onClick={() => void handleStartOffload()}
                 disabled={!canStart}
-                className="rounded-control bg-primary-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-400 active:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-control bg-accent px-5 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi active:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting
                   ? 'Offloading...'
@@ -403,10 +403,10 @@ export default function OffloadPage() {
           <GlassCard>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-overline uppercase text-ink-dim">
+                <p className="font-condensed text-overline uppercase text-dim">
                   Latest Task
                 </p>
-                <h2 className="mt-2 text-section text-ink">
+                <h2 className="mt-2 font-display text-section text-paper">
                   {activeTask?.jobName ?? 'Waiting'}
                 </h2>
               </div>
@@ -440,7 +440,7 @@ export default function OffloadPage() {
               ) : null}
             </div>
 
-            <div className="mt-5 space-y-3 text-sm text-ink-strong">
+            <div className="mt-5 space-y-3 text-sm text-body">
               <p>{activeTask?.message ?? 'No manual offload has run yet.'}</p>
               {activeTask ? (
                 <>
@@ -457,28 +457,28 @@ export default function OffloadPage() {
           </GlassCard>
 
           <GlassCard>
-            <p className="text-overline uppercase text-ink-dim">
+            <p className="font-condensed text-overline uppercase text-dim">
               Package Paths
             </p>
-            <div className="mt-4 space-y-4 text-sm text-ink-strong">
+            <div className="mt-4 space-y-4 text-sm text-body">
               <div>
-                <p className="font-semibold text-ink">Local Package</p>
+                <p className="font-semibold text-paper">Local Package</p>
                 <p className="mt-1 break-all">{activeTask?.localDestinationPath ?? 'Waiting for first offload.'}</p>
               </div>
               <div>
-                <p className="font-semibold text-ink">Web-ready Images</p>
+                <p className="font-semibold text-paper">Web-ready Images</p>
                 <p className="mt-1 break-all">{activeTask?.webReadyPath ?? 'Enable image conversion to generate this folder.'}</p>
               </div>
               <div>
-                <p className="font-semibold text-ink">Backblaze Image Prefix</p>
+                <p className="font-semibold text-paper">Backblaze Image Prefix</p>
                 <p className="mt-1 break-all">{activeTask?.cloudObjectKey ?? 'Enable Backblaze upload to generate this image-only prefix.'}</p>
               </div>
               <div>
-                <p className="font-semibold text-ink">Manifest</p>
+                <p className="font-semibold text-paper">Manifest</p>
                 <p className="mt-1 break-all">{activeTask?.manifestPath ?? 'Starts after the first offload package is created.'}</p>
               </div>
               <div>
-                <p className="font-semibold text-ink">Transfer Log</p>
+                <p className="font-semibold text-paper">Transfer Log</p>
                 <p className="mt-1 break-all">{activeTask?.logPath ?? 'Starts after the first offload package is created.'}</p>
               </div>
             </div>

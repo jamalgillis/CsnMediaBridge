@@ -61,9 +61,9 @@ upload — which is a confusing place to discover it.
 
 ### 1.4 Decide on CORS — REQUIRED if the web app plays from R2
 
-If the Asset Manager plays HLS from R2 in a browser, add a CORS policy allowing `GET` and
-`HEAD` from the Asset Manager origin. The desktop app proxies media through a local
-loopback server and is unaffected.
+If the Asset Manager plays HLS or DASH from R2 in a browser, add a CORS policy
+allowing `GET` and `HEAD` from the Asset Manager origin. The desktop app proxies
+media through a local loopback server and is unaffected.
 
 ---
 

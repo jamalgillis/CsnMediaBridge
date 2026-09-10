@@ -3,10 +3,11 @@ import StatusBadge from './StatusBadge';
 import DonutChart from './DonutChart';
 import { useBridge } from '../context/BridgeContext';
 
+// Strokes are the literal token values — SVG cannot take a Tailwind class here.
 const resourceSegments = [
-  { label: 'Encode', value: 55, colorClass: 'bg-primary-500', strokeColor: '#0e79b2' },
-  { label: 'Upload', value: 35, colorClass: 'bg-secondary-500', strokeColor: '#748b75' },
-  { label: 'Idle', value: 10, colorClass: 'bg-ink-muted', strokeColor: '#5c6573' },
+  { label: 'Encode', value: 55, colorClass: 'bg-accent', strokeColor: '#ee1518' },
+  { label: 'Upload', value: 35, colorClass: 'bg-state-ok', strokeColor: '#2dd4a4' },
+  { label: 'Idle', value: 10, colorClass: 'bg-muted', strokeColor: '#8c8c8c' },
 ];
 
 export default function SystemHealth() {
@@ -85,14 +86,14 @@ export default function SystemHealth() {
     <GlassCard className="col-span-full xl:col-span-4">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-section text-ink">System Health</h2>
-          <p className="mt-1 text-sm text-ink-muted">
+          <h2 className="font-display text-section text-paper">System Health</h2>
+          <p className="mt-1 text-sm text-muted">
             Resource allocation and pipeline readiness.
           </p>
         </div>
         <button
           onClick={() => void refreshSystem()}
-          className="rounded-control border px-3 py-2 text-overline uppercase transition border-surface-hairline bg-surface-elevated text-ink-strong hover:bg-surface-card"
+          className="rounded-control border px-3 py-2 font-condensed text-overline uppercase transition border-rule bg-ink-chip text-body hover:bg-ink-panel"
         >
           Refresh
         </button>
@@ -111,19 +112,19 @@ export default function SystemHealth() {
       <div className="space-y-5">
         {/* Runtime checks */}
         <div>
-          <p className="mb-3 text-overline uppercase text-ink-dim">
+          <p className="mb-3 font-condensed text-overline uppercase text-dim">
             Runtime
           </p>
           <div className="space-y-3">
             {binaryChecks.map((item) => (
               <div
                 key={item.label}
-                className="rounded-control border p-4 border-surface-hairline bg-surface-canvas"
+                className="rounded-control border p-4 border-rule bg-ink"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-ink">{item.label}</p>
-                    <p className="mt-1 text-sm text-ink-muted">{item.detail}</p>
+                    <p className="font-medium text-paper">{item.label}</p>
+                    <p className="mt-1 text-sm text-muted">{item.detail}</p>
                   </div>
                   <StatusBadge tone={item.ready ? 'good' : 'danger'}>
                     {item.ready ? 'Ready' : 'Missing'}
@@ -136,19 +137,19 @@ export default function SystemHealth() {
 
         {/* Config checks */}
         <div>
-          <p className="mb-3 text-overline uppercase text-ink-dim">
+          <p className="mb-3 font-condensed text-overline uppercase text-dim">
             Configuration
           </p>
           <div className="space-y-3">
             {configChecks.map((item) => (
               <div
                 key={item.label}
-                className="rounded-control border p-4 border-surface-hairline bg-surface-canvas"
+                className="rounded-control border p-4 border-rule bg-ink"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-ink">{item.label}</p>
-                    <p className="mt-1 truncate text-sm text-ink-muted">
+                    <p className="font-medium text-paper">{item.label}</p>
+                    <p className="mt-1 truncate text-sm text-muted">
                       {item.detail}
                     </p>
                   </div>
@@ -162,19 +163,19 @@ export default function SystemHealth() {
         </div>
 
         <div>
-          <p className="mb-3 text-overline uppercase text-ink-dim">
+          <p className="mb-3 font-condensed text-overline uppercase text-dim">
             Service Status
           </p>
           <div className="space-y-3">
             {serviceChecks.map((item) => (
               <div
                 key={item.label}
-                className="rounded-control border p-4 border-surface-hairline bg-surface-canvas"
+                className="rounded-control border p-4 border-rule bg-ink"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-ink">{item.label}</p>
-                    <p className="mt-1 text-sm text-ink-muted">{item.detail}</p>
+                    <p className="font-medium text-paper">{item.label}</p>
+                    <p className="mt-1 text-sm text-muted">{item.detail}</p>
                   </div>
                   <StatusBadge
                     tone={
@@ -190,7 +191,7 @@ export default function SystemHealth() {
         </div>
 
         {state.system.notes.length > 0 && (
-          <div className="rounded-control border border-state-processing/30 bg-state-processing/[.12] p-4 text-sm text-amber-200">
+          <div className="rounded-control border border-state-warn/30 bg-state-warn/[.12] p-4 text-sm text-state-warn">
             {state.system.notes.join(' ')}
           </div>
         )}

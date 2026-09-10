@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rm, stat, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import ffmpeg from 'fluent-ffmpeg';
 import {
@@ -111,6 +111,8 @@ export interface PackagedVideoResult {
   posterPath: string | null;
   masterPlaylistPath: string | null;
   manifestRelativePath: string | null;
+  dashManifestPath: string | null;
+  dashManifestRelativePath: string | null;
   playbackRelativePath: string;
   sources: PackagedSourceDescriptor[];
   effectiveEncoder: EffectiveHardwareEncoder;
@@ -139,6 +141,7 @@ interface HlsVariantDefinition {
 }
 
 const HLS_SEGMENT_DURATION_SECONDS = 2;
+const DASH_MANIFEST_FILENAME = 'manifest.mpd';
 const PROGRESSIVE_H264_FILENAME = 'playback-h264.mp4';
 const PROGRESSIVE_AV1_FILENAME = 'playback-av1.webm';
 const HLS_VARIANTS: HlsVariantDefinition[] = [
@@ -337,6 +340,75 @@ function buildHlsScaleFilters() {
 function getHlsKeyframeInterval(frameRate: number) {
   const normalizedFrameRate = frameRate > 0 ? frameRate : 30;
   return Math.max(24, Math.round(normalizedFrameRate * HLS_SEGMENT_DURATION_SECONDS));
+}
+
+function parseBitrate(value: string) {
+  const match = value.match(/^(\d+(?:\.\d+)?)k$/i);
+  if (match) {
+    return Math.round(Number(match[1]) * 1000);
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+}
+
+function formatIsoDuration(seconds: number) {
+  const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  return `PT${safeSeconds.toFixed(3).replace(/\.?0+$/, '')}S`;
+}
+
+function escapeXmlAttribute(value: string | number | boolean) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function parseHlsSegmentDurations(playlist: string) {
+  return playlist
+    .split(/\r?\n/)
+    .map((line) => line.match(/^#EXTINF:([\d.]+)/)?.[1])
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Math.max(1, Math.round(Number(value) * 1000)))
+    .filter((durationMs) => Number.isFinite(durationMs) && durationMs > 0);
+}
+
+function buildFallbackSegmentDurations(durationSeconds: number) {
+  const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0
+    ? durationSeconds
+    : HLS_SEGMENT_DURATION_SECONDS;
+  const durations: number[] = [];
+  let remainingMs = Math.max(1, Math.round(safeDuration * 1000));
+  const segmentMs = HLS_SEGMENT_DURATION_SECONDS * 1000;
+
+  while (remainingMs > 0) {
+    const durationMs = Math.min(segmentMs, remainingMs);
+    durations.push(durationMs);
+    remainingMs -= durationMs;
+  }
+
+  return durations;
+}
+
+function buildSegmentTimelineXml(segmentDurationsMs: number[]) {
+  const entries: string[] = [];
+
+  for (let index = 0; index < segmentDurationsMs.length; index += 1) {
+    const durationMs = segmentDurationsMs[index];
+    let repeat = 0;
+
+    while (segmentDurationsMs[index + repeat + 1] === durationMs) {
+      repeat += 1;
+    }
+
+    entries.push(
+      `        <S d="${escapeXmlAttribute(durationMs)}"${repeat > 0 ? ` r="${repeat}"` : ''}/>`
+    );
+    index += repeat;
+  }
+
+  return entries.join('\n');
 }
 
 function buildPosterCandidateTimes(durationSeconds: number) {
@@ -646,6 +718,8 @@ export class TranscodeService {
       posterPath,
       masterPlaylistPath: null,
       manifestRelativePath: null,
+      dashManifestPath: null,
+      dashManifestRelativePath: null,
       playbackRelativePath: PROGRESSIVE_H264_FILENAME,
       sources: [
         {
@@ -669,6 +743,7 @@ export class TranscodeService {
     }
 
     const masterPlaylistPath = path.join(task.outputDirectory, 'master.m3u8');
+    const dashManifestPath = path.join(task.outputDirectory, DASH_MANIFEST_FILENAME);
     const legacyMasterPlaylistPath = path.resolve(process.cwd(), 'master.m3u8');
     const outputPlaylistPattern = path.join(task.outputDirectory, '%v', 'index.m3u8');
     const keyframeInterval = getHlsKeyframeInterval(probe.frameRate);
@@ -750,6 +825,12 @@ export class TranscodeService {
       legacyMasterPlaylistPath,
       commandStartedAt,
     );
+    await this.writeDashManifest({
+      outputDirectory: task.outputDirectory,
+      outputPath: dashManifestPath,
+      durationSeconds: probe.durationSeconds,
+      hasAudio: probe.hasAudio,
+    });
 
     const posterPath = task.settings.extractPosterFrame
       ? await this.extractPoster(task, probe.durationSeconds)
@@ -767,6 +848,8 @@ export class TranscodeService {
       posterPath,
       masterPlaylistPath,
       manifestRelativePath: 'master.m3u8',
+      dashManifestPath,
+      dashManifestRelativePath: DASH_MANIFEST_FILENAME,
       playbackRelativePath: 'master.m3u8',
       sources: [],
       effectiveEncoder: runtime.effectiveEncoder,
@@ -852,6 +935,8 @@ export class TranscodeService {
       posterPath,
       masterPlaylistPath: null,
       manifestRelativePath: null,
+      dashManifestPath: null,
+      dashManifestRelativePath: null,
       playbackRelativePath: PROGRESSIVE_H264_FILENAME,
       sources: sortStoredVideoSources(
         packagedSources.map((source) => ({
@@ -977,6 +1062,63 @@ export class TranscodeService {
 
     await copyFile(legacyMasterPlaylistPath, masterPlaylistPath);
     await unlink(legacyMasterPlaylistPath).catch(() => undefined);
+  }
+
+  private async writeDashManifest(task: {
+    outputDirectory: string;
+    outputPath: string;
+    durationSeconds: number;
+    hasAudio: boolean;
+  }) {
+    const referencePlaylistPath = path.join(task.outputDirectory, '0', 'index.m3u8');
+    const referencePlaylist = await readFile(referencePlaylistPath, 'utf8').catch(() => '');
+    const parsedDurations = parseHlsSegmentDurations(referencePlaylist);
+    const segmentDurations = parsedDurations.length > 0
+      ? parsedDurations
+      : buildFallbackSegmentDurations(task.durationSeconds);
+    const timelineDurationSeconds =
+      segmentDurations.reduce((sum, durationMs) => sum + durationMs, 0) / 1000;
+    const durationSeconds = task.durationSeconds > 0
+      ? task.durationSeconds
+      : timelineDurationSeconds;
+    const codecs = task.hasAudio ? 'avc1.640028,mp4a.40.2' : 'avc1.640028';
+    const segmentTimeline = buildSegmentTimelineXml(segmentDurations);
+    const representations = HLS_VARIANTS.map((variant, index) =>
+      `      <Representation id="${escapeXmlAttribute(index)}" bandwidth="${escapeXmlAttribute(
+        parseBitrate(variant.bitrate),
+      )}" width="${escapeXmlAttribute(variant.width)}" height="${escapeXmlAttribute(
+        variant.height,
+      )}" codecs="${escapeXmlAttribute(codecs)}"/>`,
+    ).join('\n');
+
+    const manifest = `<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011"
+     profiles="urn:mpeg:dash:profile:isoff-main:2011"
+     type="static"
+     mediaPresentationDuration="${escapeXmlAttribute(formatIsoDuration(durationSeconds))}"
+     minBufferTime="${escapeXmlAttribute(formatIsoDuration(HLS_SEGMENT_DURATION_SECONDS * 2))}"
+     maxSegmentDuration="${escapeXmlAttribute(formatIsoDuration(HLS_SEGMENT_DURATION_SECONDS))}">
+  <Period id="0" duration="${escapeXmlAttribute(formatIsoDuration(durationSeconds))}">
+    <AdaptationSet id="0"
+                   mimeType="video/mp4"
+                   segmentAlignment="true"
+                   subsegmentAlignment="true"
+                   startWithSAP="1">
+      <SegmentTemplate timescale="1000"
+                       startNumber="0"
+                       initialization="$RepresentationID$/init_$RepresentationID$.mp4"
+                       media="$RepresentationID$/segment_$Number%03d$.m4s">
+        <SegmentTimeline>
+${segmentTimeline}
+        </SegmentTimeline>
+      </SegmentTemplate>
+${representations}
+    </AdaptationSet>
+  </Period>
+</MPD>
+`;
+
+    await writeFile(task.outputPath, manifest, 'utf8');
   }
 
   private async runFfmpegCommand({

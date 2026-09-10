@@ -136,8 +136,8 @@ export default function ManualIntakePanel() {
     <GlassCard className="col-span-full xl:col-span-4">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-section text-ink">Manual Intake</h2>
-          <p className="mt-1 text-sm text-ink-muted">
+          <h2 className="font-display text-section text-paper">Manual Intake</h2>
+          <p className="mt-1 text-sm text-muted">
             {source ? source.sourceFileName : 'No file selected'}
           </p>
         </div>
@@ -151,20 +151,20 @@ export default function ManualIntakePanel() {
           type="button"
           onClick={() => void handleChooseSource()}
           disabled={isChoosing || isSubmitting}
-          className="flex w-full items-center justify-center rounded-control border px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 border-surface-hairline bg-surface-elevated text-ink hover:bg-surface-card"
+          className="flex w-full items-center justify-center rounded-control border px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 border-rule bg-ink-chip text-paper hover:bg-ink-panel"
         >
           {isChoosing ? 'Choosing...' : source ? 'Change File' : 'Choose File'}
         </button>
 
         {source && (
           <div
-            className="rounded-control border p-4 text-sm border-surface-hairline bg-surface-canvas"
+            className="rounded-control border p-4 text-sm border-rule bg-ink"
           >
             <div className="min-w-0">
-              <p className="truncate font-medium text-ink">
+              <p className="truncate font-medium text-paper">
                 {source.sourceFileName}
               </p>
-              <p className="mt-1 text-ink-muted">
+              <p className="mt-1 text-muted">
                 {formatBytes(source.fileSizeBytes)}
               </p>
             </div>
@@ -182,8 +182,8 @@ export default function ManualIntakePanel() {
                 disabled={isSubmitting}
                 className={`rounded-control border px-3 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                   isSelected
-                    ? 'border-primary-500/50 bg-primary-500/[.16] text-primary-200'
-                    : 'border-surface-hairline bg-surface-elevated text-ink-strong hover:bg-surface-card'
+                    ? 'border-accent/50 bg-accent/[.16] text-accent-hi'
+                    : 'border-rule bg-ink-chip text-body hover:bg-ink-panel'
                 }`}
               >
                 <span className="block text-sm font-semibold">{option.label}</span>
@@ -195,70 +195,70 @@ export default function ManualIntakePanel() {
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-ink-muted">
+            <span className="mb-1 block text-xs font-medium text-muted">
               Title
             </span>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-primary-400 border-surface-hairline bg-surface-canvas text-ink"
+              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-ink-muted">
+            <span className="mb-1 block text-xs font-medium text-muted">
               Project
             </span>
             <input
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-primary-400 border-surface-hairline bg-surface-canvas text-ink"
+              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-ink-muted">
+            <span className="mb-1 block text-xs font-medium text-muted">
               Event
             </span>
             <input
               value={eventName}
               onChange={(event) => setEventName(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-primary-400 border-surface-hairline bg-surface-canvas text-ink"
+              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-ink-muted">
+            <span className="mb-1 block text-xs font-medium text-muted">
               Tags
             </span>
             <input
               value={tagsInput}
               onChange={(event) => setTagsInput(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-primary-400 border-surface-hairline bg-surface-canvas text-ink"
+              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
             />
           </label>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-ink-muted">
+          <span className="mb-1 block text-xs font-medium text-muted">
             Playlists
           </span>
           <input
             value={playlistInput}
             onChange={(event) => setPlaylistInput(event.target.value)}
-            className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-primary-400 border-surface-hairline bg-surface-canvas text-ink"
+            className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-ink-muted">
+          <span className="mb-1 block text-xs font-medium text-muted">
             Description
           </span>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={3}
-            className="w-full resize-none rounded-control border px-3 py-2 text-sm outline-none transition focus:border-primary-400 border-surface-hairline bg-surface-canvas text-ink"
+            className="w-full resize-none rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
           />
         </label>
 
@@ -269,7 +269,7 @@ export default function ManualIntakePanel() {
         )}
 
         {successMessage && (
-          <div className="rounded-control border border-state-posted/30 p-3 text-sm bg-state-posted/[.13] text-emerald-100">
+          <div className="rounded-control border border-state-ok/30 p-3 text-sm bg-state-ok/[.13] text-state-ok">
             {successMessage}
           </div>
         )}
@@ -278,7 +278,7 @@ export default function ManualIntakePanel() {
           type="button"
           onClick={() => void handleSubmit()}
           disabled={!source || isSubmitting || isChoosing}
-          className="w-full rounded-control bg-primary-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-control bg-accent px-4 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? 'Sending...' : 'Send to Queue'}
         </button>

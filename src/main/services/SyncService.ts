@@ -116,6 +116,7 @@ export interface SyncTargets {
   posterObjectKey: string | null;
   playbackUrl: string;
   manifestUrl: string | null;
+  dashManifestUrl: string | null;
   posterUrl: string | null;
   sources: StoredVideoSource[];
 }
@@ -172,6 +173,9 @@ export function buildSyncTargets(
   const manifestObjectKey = artifact.manifestRelativePath
     ? joinObjectKey(distributionObjectKey, artifact.manifestRelativePath)
     : null;
+  const dashManifestObjectKey = artifact.dashManifestRelativePath
+    ? joinObjectKey(distributionObjectKey, artifact.dashManifestRelativePath)
+    : null;
   const posterObjectKey = artifact.posterPath
     ? keyPlan.posterObjectKey ??
       joinObjectKey(distributionObjectKey, path.basename(artifact.posterPath))
@@ -184,6 +188,9 @@ export function buildSyncTargets(
     playbackUrl: joinPublicUrl(settings.r2.publicBaseUrl, playbackObjectKey),
     manifestUrl: manifestObjectKey
       ? joinPublicUrl(settings.r2.publicBaseUrl, manifestObjectKey)
+      : null,
+    dashManifestUrl: dashManifestObjectKey
+      ? joinPublicUrl(settings.r2.publicBaseUrl, dashManifestObjectKey)
       : null,
     posterUrl: posterObjectKey
       ? joinPublicUrl(settings.r2.publicBaseUrl, posterObjectKey)
@@ -258,7 +265,7 @@ export class SyncService {
       task.onStageChange?.(
         'uploading-distribution',
         task.artifact.deliveryType === 'hls'
-          ? 'Uploading HLS ladder.'
+          ? 'Uploading CMAF HLS/DASH package.'
           : 'Uploading progressive playback renditions.',
       );
       await this.runRclone(

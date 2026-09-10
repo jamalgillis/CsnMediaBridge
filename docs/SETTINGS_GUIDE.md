@@ -58,6 +58,7 @@ This is the local working folder the app uses while building the distribution ve
 This folder holds files like:
 
 - `master.m3u8`
+- `manifest.mpd`
 - HLS variant playlists and `.m4s` segments
 - progressive clip renditions such as `playback-h264.mp4`
 - posters such as `poster.jpg`

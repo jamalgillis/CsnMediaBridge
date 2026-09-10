@@ -6,12 +6,16 @@ import type {
   RetrieveArchivedMasterResult,
   AppSettings,
   BridgeStateSnapshot,
+  ConnectionProfileExportResult,
+  ConnectionProfileImportResult,
   DeleteStoredVideoRequest,
   DeleteStoredVideoResult,
   DirectoryBrowseResult,
   GenerateStoredVideoPosterCandidatesRequest,
   IngestUploadAuditSnapshot,
   LocalTrimSourceSnapshot,
+  LiveStreamHandoffJobSnapshot,
+  LiveStreamHandoffWorkerWakeResult,
   ManualIntakeRequest,
   ManualIntakeSourceSnapshot,
   OffloadSourceSnapshot,
@@ -31,6 +35,8 @@ export interface MediaBridgeApi {
   getState: () => Promise<BridgeStateSnapshot>;
   loadSettings: () => Promise<AppSettings>;
   saveSettings: (settings: AppSettings) => Promise<SaveSettingsResult>;
+  importConnectionProfile: () => Promise<ConnectionProfileImportResult>;
+  exportConnectionProfile: (profileName?: string) => Promise<ConnectionProfileExportResult>;
   checkForAppUpdates: () => Promise<BridgeStateSnapshot>;
   installAppUpdate: () => Promise<void>;
   startWatching: () => Promise<BridgeStateSnapshot>;
@@ -64,8 +70,13 @@ export interface MediaBridgeApi {
   pauseOffloadTask: () => Promise<OffloadTaskSnapshot | null>;
   cancelOffloadTask: () => Promise<OffloadTaskSnapshot | null>;
   getStorageUsage: () => Promise<StorageUsageSnapshot | null>;
+  listLiveStreamHandoffJobs: () => Promise<LiveStreamHandoffJobSnapshot[]>;
+  wakeLiveStreamHandoffWorker: () => Promise<LiveStreamHandoffWorkerWakeResult>;
   onStateUpdate: (listener: (state: BridgeStateSnapshot) => void) => () => void;
   onOffloadUpdate: (listener: (task: OffloadTaskSnapshot) => void) => () => void;
+  onLiveStreamHandoffUpdate: (
+    listener: (jobs: LiveStreamHandoffJobSnapshot[]) => void,
+  ) => () => void;
 }
 
 declare global {

@@ -79,6 +79,56 @@ export type StorageTaskReason =
   | 'delete_asset'
   | 'manual';
 
+export type LiveStreamProvider = 'cloudflare_stream';
+
+export type LiveStreamHandoffJobStatus =
+  | 'pending'
+  | 'claimed'
+  | 'downloading'
+  | 'processing'
+  | 'uploading'
+  | 'registering'
+  | 'completed'
+  | 'failed'
+  | 'canceled';
+
+export interface LiveStreamHandoffJobSnapshot {
+  _id: string;
+  provider: LiveStreamProvider;
+  providerVideoId: string;
+  providerLiveInputId?: string;
+  sourceDownloadUrl?: string;
+  sourceObjectKey?: string;
+  status: LiveStreamHandoffJobStatus;
+  claimedByNodeKey?: string;
+  leaseExpiresAt?: string;
+  attempts: number;
+  maxAttempts: number;
+  projectName?: string;
+  eventName?: string;
+  recordedAt?: string;
+  requestedDelivery?: Extract<RequestedDeliveryType, 'auto' | 'hls'>;
+  archiveObjectKey?: string;
+  distributionObjectKey?: string;
+  playbackUrl?: string;
+  manifestUrl?: string;
+  dashManifestUrl?: string;
+  posterUrl?: string;
+  errorMessage?: string;
+  progress?: number;
+  stage?: string;
+  message?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+export interface LiveStreamHandoffWorkerWakeResult {
+  woke: boolean;
+  claimedJobId: string | null;
+  message?: string;
+}
+
 export interface StorageTaskSnapshot {
   _id: string;
   operation: StorageTaskOperation;
@@ -198,6 +248,31 @@ export interface AppUpdateSettings {
   checkIntervalMinutes: number;
 }
 
+export interface BackendConnectionProfile {
+  profileVersion: 1;
+  profileName: string;
+  storage?: Partial<StorageSettings>;
+  b2?: Partial<Pick<BackblazeB2Settings, 'bucket' | 'pathPrefix' | 's3Endpoint'>>;
+  r2?: Partial<Pick<CloudflareR2Settings, 'accountId' | 'bucket' | 'pathPrefix' | 'publicBaseUrl'>>;
+  convex?: Partial<Pick<ConvexSettings, 'deploymentUrl' | 'mutationPath'>>;
+  offload?: Partial<Pick<OffloadSettings, 'b2PathPrefix'>>;
+  appUpdates?: Partial<AppUpdateSettings>;
+  exportedAt?: string;
+  notes?: string;
+}
+
+export interface ConnectionProfileImportResult extends SaveSettingsResult {
+  canceled: boolean;
+  profileName: string | null;
+  path: string | null;
+}
+
+export interface ConnectionProfileExportResult {
+  canceled: boolean;
+  profileName: string | null;
+  path: string | null;
+}
+
 export interface StoredVideoSource {
   codec: VideoSourceCodec;
   mimeType: string;
@@ -286,6 +361,7 @@ export interface IngestJobSnapshot {
   outputDirectory: string | null;
   masterPlaylistPath: string | null;
   manifestUrl: string | null;
+  dashManifestUrl: string | null;
   posterPath: string | null;
   posterUrl: string | null;
   publicUrl: string | null;
@@ -322,6 +398,7 @@ export interface StoredVideoSnapshot {
   distributionObjectKey: string;
   masterPlaylistUrl?: string;
   manifestUrl?: string;
+  dashManifestUrl?: string;
   playbackUrl: string;
   posterUrl?: string;
   sources?: StoredVideoSource[];

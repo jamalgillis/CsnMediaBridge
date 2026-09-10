@@ -12,8 +12,8 @@ export default function JobMonitor() {
     <GlassCard className="col-span-full xl:col-span-8">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-section text-ink">Universal VOD Queue</h2>
-          <p className="mt-1 text-sm text-ink-muted">
+          <h2 className="font-display text-section text-paper">Universal VOD Queue</h2>
+          <p className="mt-1 text-sm text-muted">
             {activeJobs.length} active jobs, {completedCount} completed this session, queue depth{' '}
             {state.queueDepth}.
           </p>
@@ -28,7 +28,7 @@ export default function JobMonitor() {
       <div className="space-y-3">
         {state.jobs.length === 0 ? (
         <div
-            className="rounded-control border p-10 text-center text-sm border-surface-hairline bg-surface-canvas text-ink-dim"
+            className="rounded-control border p-10 text-center text-sm border-rule bg-ink text-dim"
           >
             Manual intake and watched-folder jobs will appear here once they enter the queue.
           </div>

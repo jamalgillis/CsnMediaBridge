@@ -59,7 +59,7 @@ differ, the storage layout document wins.
 
 | Path | Owner | Purpose | Lifecycle |
 | --- | --- | --- | --- |
-| `streaming/` | `desktop` | Production HLS/fMP4 playback packages for web review and VOD playback. | Persistent; never automatically deleted. |
+| `streaming/` | `desktop` | Production CMAF HLS/DASH playback packages for web review and VOD playback. | Persistent; never automatically deleted. |
 | `posters/` | `desktop` | Thumbnails and article cards. | Persistent; never automatically deleted. |
 | `staging/social/` | `desktop` | Preemptively rendered social MP4 variants ready for quick handoff. | Provider lifecycle rule deletes after 3 days. |
 | `scheduled/social/` | `shared` | Social MP4 variants protected for future scheduled publishing. | Deleted by trusted cleanup after a verified publish; 7-day provider rule as a backstop. |

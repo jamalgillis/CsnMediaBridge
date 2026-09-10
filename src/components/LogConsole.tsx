@@ -87,25 +87,27 @@ export default function LogConsole() {
       fontSize: 12,
       lineHeight: 1.35,
       cursorBlink: false,
+      // Terminal palette in CSN tokens: the ink canvas, body type, and the
+      // brand red wherever the log shouts. See data/config/colors.js.
       theme: {
-        background: '#0a0b0e',
-        foreground: '#cdd2da',
-        cursor: '#7fc4e3',
-        black: '#14161b',
-        red: '#f87171',
-        green: '#5ee6ad',
-        yellow: '#fbbf24',
-        blue: '#60a5fa',
-        magenta: '#c084fc',
-        cyan: '#7fc4e3',
-        white: '#edeef1',
-        brightBlack: '#5c6573',
-        brightRed: '#fca5a5',
-        brightGreen: '#6ee7b7',
-        brightYellow: '#fcd34d',
-        brightBlue: '#93c5fd',
-        brightMagenta: '#d8b4fe',
-        brightCyan: '#a8dcf2',
+        background: '#050505',
+        foreground: '#d6d6d6',
+        cursor: '#ee1518',
+        black: '#141414',
+        red: '#ff4d6d',
+        green: '#2dd4a4',
+        yellow: '#ffb84d',
+        blue: '#8c8c8c',
+        magenta: '#ee1518',
+        cyan: '#b5b5b5',
+        white: '#fbfef9',
+        brightBlack: '#6b6b6b',
+        brightRed: '#ff3d42',
+        brightGreen: '#5fe3bb',
+        brightYellow: '#ffcd7d',
+        brightBlue: '#b5b5b5',
+        brightMagenta: '#ff3d42',
+        brightCyan: '#d6d6d6',
         brightWhite: '#ffffff',
       },
     });
@@ -160,28 +162,28 @@ export default function LogConsole() {
 
   return (
     <GlassCard padded={false} className="col-span-full">
-      <div className="flex items-center justify-between px-4 py-3 border-surface-hairline">
+      <div className="flex items-center justify-between px-4 py-3 border-rule">
         <div className="flex items-center gap-3">
-          <h2 className="text-section text-ink">Raw Pipeline Console</h2>
+          <h2 className="font-display text-section text-paper">Raw Pipeline Console</h2>
           <div className="flex gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-            <span className="h-2.5 w-2.5 rounded-full bg-secondary-500" />
+            <span className="h-2.5 w-2.5 rounded-full bg-state-danger" />
+            <span className="h-2.5 w-2.5 rounded-full bg-state-warn" />
+            <span className="h-2.5 w-2.5 rounded-full bg-state-ok" />
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <div
-            className="flex rounded-full p-0.5 bg-surface-elevated"
+            className="flex rounded-full p-0.5 bg-ink-chip"
           >
             {filters.map((item) => (
               <button
                 key={item}
                 onClick={() => setFilter(item)}
-                className={`rounded-full px-3 py-1 text-overline uppercase transition-colors ${
+                className={`rounded-full px-3 py-1 font-condensed text-overline uppercase transition-colors ${
                   filter === item
-                    ? 'shadow-sm bg-surface-card text-ink'
-                    : 'text-ink-dim hover:text-ink'
+                    ? 'shadow-sm bg-ink-panel text-paper'
+                    : 'text-dim hover:text-paper'
                 }`}
               >
                 {item}
@@ -191,7 +193,7 @@ export default function LogConsole() {
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="rounded-full p-2 text-ink-muted transition-colors hover:bg-surface-elevated hover:text-ink"
+            className="rounded-full p-2 text-muted transition-colors hover:bg-ink-chip hover:text-paper"
           >
             <svg
               className={`h-4 w-4 transition-transform ${isExpanded ? '' : 'rotate-180'}`}
@@ -207,7 +209,7 @@ export default function LogConsole() {
       </div>
 
       {isExpanded && (
-        <div className="p-2 bg-surface-canvas">
+        <div className="p-2 bg-ink">
           <div ref={terminalContainerRef} className="h-96 w-full overflow-hidden rounded-control" />
         </div>
       )}

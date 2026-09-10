@@ -101,7 +101,11 @@ r2://{bucket}/
 │   └── vod/
 │       └── {assetKey}/
 │           ├── master.m3u8                    HLS master playlist
-│           ├── 1080p/ 720p/ 480p/             Segment renditions
+│           ├── manifest.mpd                   DASH manifest for same chunks
+│           ├── 0/ 1/ 2/ 3/                    CMAF fMP4 renditions
+│           │   ├── index.m3u8                 HLS variant playlist
+│           │   ├── init_0.mp4                 fMP4 init segment
+│           │   └── segment_000.m4s …          Shared fMP4 media segments
 │           ├── playback_h264.mp4              Progressive delivery variant
 │           └── social-{renderJobId}.mp4       Persistent social cut of this asset
 │
@@ -125,6 +129,10 @@ Rules:
 
 - `streaming/` and `posters/` are persistent. They back the live player and
   article cards; expiring them breaks published pages.
+- VOD streaming packages use one set of CMAF-style fragmented MP4 chunks. The
+  HLS `master.m3u8` and DASH `manifest.mpd` files are tiny protocol manifests
+  that point at the same media segments, so adding DASH does not change lifecycle
+  policy or meaningfully change storage cost.
 - `staging/social/` is keyed by **render job** because a staged render exists
   before anyone has decided where it will be posted.
 - `scheduled/social/` is keyed by **social post** because that is the unit the
@@ -231,6 +239,7 @@ consume the same `storage_tasks` queue, so adding it later is additive.
   // Cloudflare R2 — hot
   distributionObjectKey: "streaming/vod/a1b2c3d4e5f60718",
   masterPlaylistUrl:     "https://cdn.example.com/streaming/vod/a1b2c3d4e5f60718/master.m3u8",
+  dashManifestUrl:       "https://cdn.example.com/streaming/vod/a1b2c3d4e5f60718/manifest.mpd",
   posterUrl:             "https://cdn.example.com/posters/a1b2c3d4e5f60718/default.jpg",
 
   // The editorial record a viewer actually sees, once an operator attaches it.

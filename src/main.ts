@@ -49,6 +49,10 @@ function registerIpcHandlers(controller: BridgeController) {
   ipcMain.handle(IPC_CHANNELS.getState, async () => controller.getState());
   ipcMain.handle(IPC_CHANNELS.loadSettings, async () => controller.loadSettings());
   ipcMain.handle(IPC_CHANNELS.saveSettings, async (_event, settings) => controller.saveSettings(settings));
+  ipcMain.handle(IPC_CHANNELS.importConnectionProfile, async () =>
+    controller.importConnectionProfile());
+  ipcMain.handle(IPC_CHANNELS.exportConnectionProfile, async (_event, profileName?: string) =>
+    controller.exportConnectionProfile(profileName));
   ipcMain.handle(IPC_CHANNELS.checkForAppUpdates, async () => controller.checkForAppUpdates());
   ipcMain.handle(IPC_CHANNELS.installAppUpdate, async () => controller.installAppUpdate());
   ipcMain.handle(IPC_CHANNELS.startWatching, async () => controller.startWatching());
@@ -91,6 +95,10 @@ function registerIpcHandlers(controller: BridgeController) {
   ipcMain.handle(IPC_CHANNELS.pauseOffloadTask, async () => controller.pauseOffloadTask());
   ipcMain.handle(IPC_CHANNELS.cancelOffloadTask, async () => controller.cancelOffloadTask());
   ipcMain.handle(IPC_CHANNELS.getStorageUsage, async () => controller.getStorageUsage());
+  ipcMain.handle(IPC_CHANNELS.listLiveStreamHandoffJobs, async () =>
+    controller.listLiveStreamHandoffJobs());
+  ipcMain.handle(IPC_CHANNELS.wakeLiveStreamHandoffWorker, async () =>
+    controller.wakeLiveStreamHandoffWorker());
 }
 
 app.on('ready', async () => {

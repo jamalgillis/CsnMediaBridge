@@ -5,15 +5,15 @@ import StatusBadge from '../components/StatusBadge';
 import StoredVideoPlayer from '../components/StoredVideoPlayer';
 import { useBridge } from '../context/BridgeContext';
 import { getPrimaryPlaybackUrl, inferStoredContentType, inferStoredDeliveryType } from '../shared/media';
-import { hueFor, hueGradient } from '../shared/spool';
-import Thumb from '../components/spool/Thumb';
+import { swatchFor } from '../shared/csn';
+import Thumb from '../components/csn/Thumb';
 import {
   AddToCollectionIcon,
   CheckIcon,
   ChevronDownIcon,
   CloseIcon,
   CollectionIcon,
-} from '../components/spool/icons';
+} from '../components/csn/icons';
 import type {
   ContentType,
   DeliveryType,
@@ -59,7 +59,7 @@ const SORT_OPTIONS = [
 ] as const;
 type SortOption = (typeof SORT_OPTIONS)[number]['id'];
 
-/** The top bar speaks Spool's vocabulary; the library sorts by its own. */
+/** The top bar speaks the shell's vocabulary; the library sorts by its own. */
 const SORT_PARAM_TO_OPTION: Record<string, SortOption> = {
   recent: 'newest',
   name: 'title',
@@ -470,6 +470,7 @@ function getStorageStrings(video: StoredVideoSnapshot) {
     video.distributionObjectKey,
     video.manifestUrl,
     video.masterPlaylistUrl,
+    video.dashManifestUrl,
     video.playbackUrl,
     ...(video.sources ?? []).flatMap((source) => [source.objectKey, source.url]),
   ]
@@ -977,9 +978,9 @@ function getEmptyLibraryCopy(hasConvexConfig: boolean) {
 
 const PANEL_INPUT_CLASS = [
   'w-full rounded-control border border-white/10 bg-white/5',
-  'px-4 py-3 text-sm text-ink outline-none transition',
-  'placeholder:text-ink-dim',
-  'focus:border-primary-300/35 focus:ring-1 focus:ring-primary-300/20',
+  'px-4 py-3 text-sm text-paper outline-none transition',
+  'placeholder:text-dim',
+  'focus:border-accent-hi/35 focus:ring-1 focus:ring-accent-hi/20',
 ].join(' ');
 
 function SingleValuePicker({ label, onChange, options, placeholder, value }: SingleValuePickerProps) {
@@ -1006,7 +1007,7 @@ function SingleValuePicker({ label, onChange, options, placeholder, value }: Sin
 
   return (
     <div>
-      <label className="mb-2 block text-overline uppercase text-ink-dim">
+      <label className="mb-2 block font-condensed text-overline uppercase text-dim">
         {label}
       </label>
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr),auto]">
@@ -1025,7 +1026,7 @@ function SingleValuePicker({ label, onChange, options, placeholder, value }: Sin
         {value && (
           <button
             onClick={() => onChange('')}
-            className="rounded-control border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-ink-strong transition hover:bg-white/[.08]"
+            className="rounded-control border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-body transition hover:bg-white/[.08]"
             type="button"
           >
             Clear
@@ -1042,7 +1043,7 @@ function SingleValuePicker({ label, onChange, options, placeholder, value }: Sin
         />
         <button
           onClick={handleAddValue}
-          className="rounded-control bg-primary-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-control bg-accent px-4 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
           disabled={!newValue.trim()}
           type="button"
         >
@@ -1074,7 +1075,7 @@ function MultiValuePicker({ label, onChange, options, placeholder, values }: Mul
 
   return (
     <div>
-      <label className="mb-2 block text-overline uppercase text-ink-dim">
+      <label className="mb-2 block font-condensed text-overline uppercase text-dim">
         {label}
       </label>
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr),auto]">
@@ -1099,7 +1100,7 @@ function MultiValuePicker({ label, onChange, options, placeholder, values }: Mul
         />
         <button
           onClick={() => handleAddValue(newValue)}
-          className="rounded-control bg-primary-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-control bg-accent px-4 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
           disabled={!newValue.trim()}
           type="button"
         >
@@ -1112,7 +1113,7 @@ function MultiValuePicker({ label, onChange, options, placeholder, values }: Mul
             <button
               key={selectedValue}
               onClick={() => onChange(values.filter((value) => value !== selectedValue))}
-              className="rounded-full bg-white/8 px-3 py-1 text-overline uppercase text-ink-strong transition hover:bg-white/12"
+              className="rounded-full bg-white/8 px-3 py-1 font-condensed text-overline uppercase text-body transition hover:bg-white/12"
               type="button"
             >
               {selectedValue} x
@@ -1141,7 +1142,7 @@ function FilterChipGroup<T extends string>({
 }: FilterChipGroupProps<T>) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-overline uppercase text-ink-dim">
+      <span className="font-condensed text-overline uppercase text-dim">
         {label}
       </span>
       <div className="flex gap-1.5">
@@ -1154,8 +1155,8 @@ function FilterChipGroup<T extends string>({
               onClick={() => onChange(option)}
               className={`shrink-0 rounded-chip border px-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-[.03em] transition ${
                 isActive
-                  ? 'border-primary-500/50 bg-primary-500/[.16] text-primary-200'
-                  : 'border-white/[.08] bg-surface-field text-ink-dim hover:text-ink-muted'
+                  ? 'border-accent/50 bg-accent/[.16] text-accent-hi'
+                  : 'border-white/[.08] bg-ink-tile text-dim hover:text-muted'
               }`}
             >
               {renderLabel(option)}
@@ -1174,7 +1175,7 @@ interface SeriesFilterProps {
 }
 
 /**
- * "All series" dropdown from the Spool library header — an elevated popover
+ * "All series" dropdown in the library header — an elevated popover
  * listing every collection with a live count and a hue dot matching the cards.
  */
 function SeriesFilter({ videos, value, onChange }: SeriesFilterProps) {
@@ -1190,9 +1191,9 @@ function SeriesFilter({ videos, value, onChange }: SeriesFilterProps) {
     (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
   );
 
-  const rows: Array<{ label: string; key: string; count: number; hue: number | null }> = [
-    { label: 'All series', key: '', count: videos.length, hue: null },
-    ...series.map(([name, count]) => ({ label: name, key: name, count, hue: hueFor(name) })),
+  const rows: Array<{ label: string; key: string; count: number; swatch: string | null }> = [
+    { label: 'All series', key: '', count: videos.length, swatch: null },
+    ...series.map(([name, count]) => ({ label: name, key: name, count, swatch: swatchFor(name) })),
   ];
 
   return (
@@ -1200,7 +1201,7 @@ function SeriesFilter({ videos, value, onChange }: SeriesFilterProps) {
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className={value ? 'spool-chip-on flex items-center gap-2' : 'spool-chip-off flex items-center gap-2'}
+        className={value ? 'csn-chip-on flex items-center gap-2' : 'csn-chip-off flex items-center gap-2'}
       >
         <CollectionIcon size={14} />
         <span>{value || 'All series'}</span>
@@ -1210,8 +1211,8 @@ function SeriesFilter({ videos, value, onChange }: SeriesFilterProps) {
       {open && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="spool-pop absolute left-0 top-[calc(100%+8px)] w-[252px]">
-            <div className="px-[11px] pb-[7px] pt-2 text-overline uppercase text-ink-dim">
+          <div className="csn-pop absolute left-0 top-[calc(100%+8px)] w-[252px]">
+            <div className="px-[11px] pb-[7px] pt-2 font-condensed text-overline uppercase text-dim">
               Filter by series
             </div>
             {rows.map((row) => {
@@ -1224,19 +1225,19 @@ function SeriesFilter({ videos, value, onChange }: SeriesFilterProps) {
                     onChange(row.key);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center gap-2.5 rounded-chip px-[11px] py-[9px] text-left text-control transition hover:bg-surface-raised ${
-                    active ? 'bg-primary-500/[.14] text-ink' : 'text-ink-strong'
+                  className={`flex w-full items-center gap-2.5 rounded-chip px-[11px] py-[9px] text-left text-control transition hover:bg-white/[.05] ${
+                    active ? 'bg-accent/[.14] text-paper' : 'text-body'
                   }`}
                 >
                   <span
                     className="h-[11px] w-[11px] flex-none rounded-[3px]"
                     style={{
-                      background: row.hue === null ? 'rgba(255,255,255,.22)' : hueGradient(row.hue),
+                      background: row.swatch ?? 'rgba(255,255,255,.22)',
                     }}
                   />
                   <span className="flex-1 truncate">{row.label}</span>
-                  <span className="font-mono text-count text-ink-dim">{row.count}</span>
-                  {active && <CheckIcon size={14} className="text-primary-200" strokeWidth={2.4} />}
+                  <span className="font-mono text-count text-dim">{row.count}</span>
+                  {active && <CheckIcon size={14} className="text-accent-hi" strokeWidth={2.4} />}
                 </button>
               );
             })}
@@ -1892,11 +1893,11 @@ export default function PlayerPage() {
   const emptyLibraryCopy = getEmptyLibraryCopy(hasConvexConfig);
   return (
     <div className="px-6 pb-11 pt-[22px]">
-      {/* Page header — Spool puts the title in the body, not the top bar. */}
+      {/* Page header — the title lives in the body, not the top bar, as on the site. */}
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-page text-ink">Library</h1>
-          <div className="mt-1 text-control text-ink-muted">
+          <h1 className="font-display text-page text-paper">Library</h1>
+          <div className="mt-1 text-control text-muted">
             <span className="font-mono">{filteredVideos.length}</span>
             {filteredVideos.length === videos.length ? '' : ` of ${videos.length}`} asset
             {filteredVideos.length === 1 ? '' : 's'}
@@ -1907,7 +1908,7 @@ export default function PlayerPage() {
           <button
             type="button"
             onClick={() => setRefreshKey((current) => current + 1)}
-            className="spool-btn-secondary"
+            className="csn-btn-secondary"
           >
             Refresh
           </button>
@@ -1915,7 +1916,7 @@ export default function PlayerPage() {
             type="button"
             onClick={() => void handleRepairStoredUrls()}
             disabled={!hasConvexConfig || isRepairingUrls}
-            className="spool-btn-secondary"
+            className="csn-btn-secondary"
           >
             {isRepairingUrls ? 'Repairing…' : 'Repair URLs'}
           </button>
@@ -1929,13 +1930,13 @@ export default function PlayerPage() {
             key={option}
             type="button"
             onClick={() => setLibraryFilter(option)}
-            className={libraryFilterParam === option ? 'spool-chip-on' : 'spool-chip-off'}
+            className={libraryFilterParam === option ? 'csn-chip-on' : 'csn-chip-off'}
           >
             {LIBRARY_FILTER_LABELS[option]}
           </button>
         ))}
 
-        <div className="spool-rule mx-1" />
+        <div className="csn-rule mx-1" />
 
         <SeriesFilter
           videos={videos}
@@ -1947,7 +1948,7 @@ export default function PlayerPage() {
           <button
             type="button"
             onClick={clearCollectionFilter}
-            className="flex h-9 items-center gap-1.5 rounded-[9px] border border-surface-hairline-strong bg-transparent px-[11px] text-[12.5px] text-ink-muted transition hover:border-white/[.22] hover:text-ink"
+            className="flex h-9 items-center gap-1.5 rounded-[9px] border border-rule-strong bg-transparent px-[11px] text-[12.5px] text-muted transition hover:border-white/[.22] hover:text-paper"
           >
             Clear
             <CloseIcon size={13} />
@@ -1955,7 +1956,7 @@ export default function PlayerPage() {
         )}
       </div>
 
-      {/* Secondary filters, specific to this pipeline (no Spool equivalent). */}
+      {/* Secondary filters, specific to this pipeline (no equivalent on the site). */}
       <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2">
         <FilterChipGroup
           label="Status"
@@ -1982,15 +1983,15 @@ export default function PlayerPage() {
 
       {/* Bulk action bar, shown once something is checked in select mode. */}
       {selectMode && selectedCount > 0 && (
-        <div className="mb-4 flex items-center gap-3 rounded-panel border border-primary-500/40 bg-primary-500/[.08] px-4 py-2.5">
-          <span className="text-body font-semibold text-ink">
+        <div className="mb-4 flex items-center gap-3 rounded-panel border border-accent/40 bg-accent/[.08] px-4 py-2.5">
+          <span className="text-copy font-semibold text-paper">
             <span className="font-mono">{selectedCount}</span> selected
           </span>
           <button
             type="button"
             onClick={() => void handleBulkAddToCollection()}
             disabled={isBulkWorking}
-            className="spool-btn-secondary h-9"
+            className="csn-btn-secondary h-9"
           >
             Add to collection
           </button>
@@ -1998,7 +1999,7 @@ export default function PlayerPage() {
             type="button"
             onClick={() => void handleBulkDelete()}
             disabled={isBulkWorking}
-            className="spool-btn-danger h-9"
+            className="csn-btn-danger h-9"
           >
             Delete
           </button>
@@ -2008,17 +2009,17 @@ export default function PlayerPage() {
       {(libraryNotice || loadError || isLoading) && (
         <div className="mb-4 space-y-2">
           {isLoading && (
-            <p className="rounded-control border border-primary-500/40 bg-primary-500/[.13] px-4 py-2 text-body text-primary-200">
+            <p className="rounded-control border border-accent/40 bg-accent/[.13] px-4 py-2 text-copy text-accent-hi">
               Refreshing the stored video library…
             </p>
           )}
           {libraryNotice && (
-            <p className="rounded-control border border-secondary-500/30 bg-secondary-500/[.13] px-4 py-2 text-body text-secondary-300">
+            <p className="rounded-control border border-state-ok/30 bg-state-ok/[.13] px-4 py-2 text-copy text-state-ok">
               {libraryNotice}
             </p>
           )}
           {loadError && (
-            <p className="rounded-control border border-state-danger/30 bg-state-danger/[.12] px-4 py-2 text-body text-state-danger">
+            <p className="rounded-control border border-state-danger/30 bg-state-danger/[.12] px-4 py-2 text-copy text-state-danger">
               {loadError}
             </p>
           )}
@@ -2031,15 +2032,15 @@ export default function PlayerPage() {
             ref={assetGridRef}
             onKeyDown={handleAssetGridKeyDown}
             tabIndex={0}
-            className="outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35"
+            className="outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
           >
               {filteredVideos.length === 0 ? (
                 <div className="flex flex-col items-center justify-center px-5 py-20 text-center">
                   <div className="max-w-md">
-                    <h2 className="text-section text-ink">
+                    <h2 className="font-display text-section text-paper">
                       {videos.length === 0 ? emptyLibraryCopy.title : 'No assets match your filters.'}
                     </h2>
-                    <p className="mt-2.5 text-body leading-relaxed text-ink-muted">
+                    <p className="mt-2.5 text-copy leading-relaxed text-muted">
                       {videos.length === 0
                         ? emptyLibraryCopy.body
                         : 'Clear the search or relax the chip filters to bring more assets back.'}
@@ -2048,7 +2049,7 @@ export default function PlayerPage() {
                   {!hasConvexConfig && (
                     <Link
                       to="/settings"
-                      className="spool-btn-primary mt-5"
+                      className="csn-btn-primary mt-5"
                     >
                       Open Settings
                     </Link>
@@ -2069,16 +2070,16 @@ export default function PlayerPage() {
                         onClick={() => (selectMode ? toggleSelected(video._id) : setSelectedVideoId(video._id))}
                         className={`flex cursor-pointer items-center gap-3.5 rounded-[12px] border px-3.5 py-2.5 transition ${
                           isSelected && !selectMode
-                            ? 'border-primary-500/50 bg-primary-500/[.08]'
+                            ? 'border-accent/50 bg-accent/[.08]'
                             : isChecked
-                              ? 'border-primary-400 bg-primary-500/[.13]'
-                              : 'border-white/[.06] bg-surface-well hover:border-white/[.16]'
+                              ? 'border-accent-hi bg-accent/[.13]'
+                              : 'border-white/[.06] bg-ink-raised hover:border-white/[.16]'
                         }`}
                       >
                         {selectMode && (
                           <div
                             className={`flex h-[22px] w-[22px] flex-none items-center justify-center rounded-[6px] border-2 ${
-                              isChecked ? 'border-primary-400 bg-primary-500' : 'bg-transparent border-white/30'
+                              isChecked ? 'border-accent-hi bg-accent' : 'bg-transparent border-white/30'
                             }`}
                           >
                             {isChecked && (
@@ -2098,16 +2099,16 @@ export default function PlayerPage() {
                         />
 
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-row font-semibold text-ink">
+                          <p className="truncate font-condensed text-[17px] font-bold leading-tight text-paper">
                             {video.title}
                           </p>
-                          <p className="mt-[3px] font-mono text-count text-ink-dim">
+                          <p className="mt-[3px] font-mono text-count text-dim">
                             {formatResolutionShort(video)} · {formatFileSize(video.sourceFileSizeBytes)} · {formatShortDate(video.updatedAt)}
                           </p>
                         </div>
 
                         <span
-                          className={`hidden flex-none sm:inline-block ${kind === 'Short' ? 'spool-kind-short' : 'spool-kind'}`}
+                          className={`hidden flex-none sm:inline-block ${kind === 'Short' ? 'csn-kind-short' : 'csn-kind'}`}
                         >
                           {kind}
                         </span>
@@ -2126,7 +2127,7 @@ export default function PlayerPage() {
                             setSelectedIds({ [video._id]: true });
                             void handleBulkAddToCollection();
                           }}
-                          className="spool-quiet-btn h-8 w-8 rounded-chip"
+                          className="csn-quiet-btn h-8 w-8 rounded-chip"
                         >
                           <AddToCollectionIcon size={15} />
                         </button>
@@ -2153,11 +2154,11 @@ export default function PlayerPage() {
                         onClick={() => (selectMode ? toggleSelected(video._id) : setSelectedVideoId(video._id))}
                         className={`group cursor-pointer overflow-hidden rounded-[13px] border transition ${
                           isSelected && !selectMode
-                            ? 'border-primary-400/50 shadow-[0_0_0_2px_rgba(14,121,178,0.35)]'
+                            ? 'border-accent-hi/50 shadow-[0_0_0_2px_rgba(238,21,24,0.35)]'
                             : isChecked
-                              ? 'border-primary-400 shadow-[0_0_0_2px_rgba(14,121,178,0.45)]'
+                              ? 'border-accent-hi shadow-[0_0_0_2px_rgba(238,21,24,0.45)]'
                               : 'border-white/[.07] hover:border-white/20'
-                        } bg-surface-card`}
+                        } bg-ink-panel`}
                       >
                         <Thumb
                           seed={video._id}
@@ -2169,7 +2170,7 @@ export default function PlayerPage() {
                           {selectMode ? (
                             <div
                               className={`absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-[7px] border-2 shadow ${
-                                isChecked ? 'border-primary-400 bg-primary-500' : 'border-white/70 bg-black/40'
+                                isChecked ? 'border-accent-hi bg-accent' : 'border-white/70 bg-black/40'
                               }`}
                             >
                               {isChecked && (
@@ -2179,7 +2180,7 @@ export default function PlayerPage() {
                               )}
                             </div>
                           ) : (
-                            <span className={`absolute left-[9px] top-[9px] ${kind === 'Short' ? 'spool-kind-short' : 'spool-kind'}`}>
+                            <span className={`absolute left-[9px] top-[9px] ${kind === 'Short' ? 'csn-kind-short' : 'csn-kind'}`}>
                               {kind}
                             </span>
                           )}
@@ -2190,7 +2191,7 @@ export default function PlayerPage() {
                             </StatusBadge>
                           </div>
 
-                          <div className="spool-play pointer-events-none">
+                          <div className="csn-play pointer-events-none">
                             <svg width="14" height="14" viewBox="0 0 24 24">
                               <path d="M8 5l12 7-12 7z" fill="#fff" />
                             </svg>
@@ -2199,11 +2200,11 @@ export default function PlayerPage() {
                         </Thumb>
 
                         <div className="px-3 pb-3 pt-2.5">
-                          <p className="truncate text-body font-semibold leading-tight text-ink">
+                          <p className="truncate font-condensed text-lg font-bold leading-[1.06] text-paper">
                             {video.title}
                           </p>
                           <div className="mt-1.5 flex items-center justify-between gap-2">
-                            <p className="min-w-0 flex-1 truncate font-mono text-meta text-ink-dim">
+                            <p className="min-w-0 flex-1 truncate font-mono text-meta text-dim">
                               {formatResolutionShort(video)} · {formatFileSize(video.sourceFileSizeBytes)} · {formatShortDate(video.updatedAt)}
                             </p>
                             <div className="flex flex-none items-center gap-1.5">
@@ -2215,7 +2216,7 @@ export default function PlayerPage() {
                                   setSelectedIds({ [video._id]: true });
                                   void handleBulkAddToCollection();
                                 }}
-                                className="spool-quiet-btn h-[26px] w-[26px]"
+                                className="csn-quiet-btn h-[26px] w-[26px]"
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9}>
                                   <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -2234,11 +2235,11 @@ export default function PlayerPage() {
           </div>
 
           <aside className="hidden w-[384px] flex-none xl:block">
-            <div className="spool-card sticky top-0 flex max-h-[calc(100vh-140px)] flex-col overflow-hidden text-ink">
+            <div className="csn-card sticky top-0 flex max-h-[calc(100vh-140px)] flex-col overflow-hidden text-paper">
               {selectedVideo ? (
                 <>
                   <div className="border-b border-white/10 px-5 pt-3">
-                    <p className="mb-2 text-overline uppercase text-ink-dim">
+                    <p className="mb-2 font-condensed text-overline uppercase text-dim">
                       Inspector
                     </p>
                     <div className="flex gap-5">
@@ -2251,11 +2252,7 @@ export default function PlayerPage() {
                           key={tabId}
                           onClick={() => setInspectorTab(tabId)}
                           type="button"
-                          className={`-mb-px border-b-2 pb-3 text-[13.5px] transition ${
-                            inspectorTab === tabId
-                              ? 'border-primary-500 font-bold text-ink'
-                              : 'border-transparent font-medium text-ink-muted hover:text-ink'
-                          }`}
+                          className={inspectorTab === tabId ? 'csn-tab-on py-2.5' : 'csn-tab py-2.5'}
                         >
                           {label}
                         </button>
@@ -2266,7 +2263,7 @@ export default function PlayerPage() {
                   <div className="flex-1 overflow-y-auto px-5 py-5">
                     {inspectorTab === 'details' && (
                       <div className="space-y-5">
-                        <div className="overflow-hidden rounded-card border border-white/10 bg-surface-scrim">
+                        <div className="overflow-hidden rounded-card border border-white/10 bg-ink-tile">
                           {previewAvailable ? (
                             <StoredVideoPlayer controlsVisibility="hover" video={selectedVideo} />
                           ) : (
@@ -2275,10 +2272,10 @@ export default function PlayerPage() {
                                 {formatStatusLabel(selectedVideo.status)}
                               </StatusBadge>
                               <div className="max-w-sm">
-                                <h3 className="text-base font-semibold text-ink">
+                                <h3 className="text-base font-semibold text-paper">
                                   {getPreviewUnavailableCopy(selectedVideo.status).title}
                                 </h3>
-                                <p className="mt-2 text-xs leading-5 text-ink-muted">
+                                <p className="mt-2 text-xs leading-5 text-muted">
                                   {getPreviewUnavailableCopy(selectedVideo.status).body}
                                 </p>
                               </div>
@@ -2287,8 +2284,8 @@ export default function PlayerPage() {
                         </div>
 
                         <div>
-                          <h3 className="text-section text-ink">{selectedVideo.title}</h3>
-                          <p className="mt-1 truncate font-mono text-count text-ink-dim">
+                          <h3 className="font-display text-section text-paper">{selectedVideo.title}</h3>
+                          <p className="mt-1 truncate font-mono text-count text-dim">
                             {selectedVideo.sourceFileName}
                           </p>
                         </div>
@@ -2296,10 +2293,10 @@ export default function PlayerPage() {
                         {inferStoredContentType(selectedVideo) !== 'clip' && (
                           <div>
                             <div className="mb-2 flex items-center justify-between">
-                              <p className="text-overline uppercase text-ink-dim">
+                              <p className="font-condensed text-overline uppercase text-dim">
                                 Derived short-form clips
                               </p>
-                              <span className="text-[10px] text-ink-dim">{derivedClips.length}</span>
+                              <span className="text-[10px] text-dim">{derivedClips.length}</span>
                             </div>
                             {derivedClips.length > 0 ? (
                               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -2308,17 +2305,17 @@ export default function PlayerPage() {
                                     key={clip._id}
                                     type="button"
                                     onClick={() => setSelectedVideoId(clip._id)}
-                                    className="w-24 flex-none rounded-control border border-white/10 bg-white/5 p-2 text-left transition hover:border-secondary-500/50"
+                                    className="w-24 flex-none rounded-control border border-white/10 bg-white/5 p-2 text-left transition hover:border-state-ok/50"
                                   >
-                                    <p className="truncate text-[11px] font-medium text-ink">{clip.title}</p>
-                                    <p className="mt-0.5 text-[10px] text-ink-muted">
+                                    <p className="truncate text-[11px] font-medium text-paper">{clip.title}</p>
+                                    <p className="mt-0.5 text-[10px] text-muted">
                                       {clip.clipAspectRatio ?? formatResolution(clip)}
                                     </p>
                                   </button>
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-xs text-ink-dim">No clips created from this asset yet.</p>
+                              <p className="text-xs text-dim">No clips created from this asset yet.</p>
                             )}
                           </div>
                         )}
@@ -2333,7 +2330,7 @@ export default function PlayerPage() {
                           ].map((fact) => (
                             <span
                               key={fact}
-                              className="rounded-chip bg-white/[.06] px-2.5 py-1 font-mono text-meta text-ink-strong"
+                              className="rounded-chip bg-white/[.06] px-2.5 py-1 font-mono text-meta text-body"
                             >
                               {fact}
                             </span>
@@ -2341,16 +2338,16 @@ export default function PlayerPage() {
                         </div>
 
                         <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                          <p className="text-overline uppercase text-ink-dim">
+                          <p className="font-condensed text-overline uppercase text-dim">
                             Description
                           </p>
-                          <p className="mt-2 text-body leading-relaxed text-ink-strong">
+                          <p className="mt-2 text-copy leading-relaxed text-body">
                             {selectedVideo.description?.trim() ||
                               'No description has been added yet. Update from the Metadata tab.'}
                           </p>
                         </div>
 
-                        <div className="spool-well px-4">
+                        <div className="csn-well px-4">
                           {[
                             { k: 'Added', v: formatDate(selectedVideo.createdAt) },
                             { k: 'Updated', v: formatDate(selectedVideo.updatedAt) },
@@ -2396,8 +2393,8 @@ export default function PlayerPage() {
                                 index < rows.length - 1 ? 'border-b border-white/[.05]' : ''
                               }`}
                             >
-                              <span className="text-ink-dim">{row.k}</span>
-                              <span className="truncate font-mono text-[12px] text-ink-strong" title={row.v}>
+                              <span className="text-dim">{row.k}</span>
+                              <span className="truncate font-mono text-[12px] text-body" title={row.v}>
                                 {row.v}
                               </span>
                             </div>
@@ -2410,17 +2407,17 @@ export default function PlayerPage() {
                           </div>
                         )}
 
-                        <div className="rounded-[13px] border border-white/[.07] bg-surface-well p-4">
-                          <p className="mb-2 text-overline uppercase text-ink-dim">Master Archive</p>
+                        <div className="rounded-[13px] border border-white/[.07] bg-ink-raised p-4">
+                          <p className="mb-2 font-condensed text-overline uppercase text-dim">Master Archive</p>
                           {selectedVideo.archiveObjectKey ? (
                             <>
                               <p
-                                className="truncate font-mono text-[12px] text-ink-strong"
+                                className="truncate font-mono text-[12px] text-body"
                                 title={selectedVideo.archiveObjectKey}
                               >
                                 {selectedVideo.archiveObjectKey}
                               </p>
-                              <p className="mt-2 text-xs leading-5 text-ink-muted">
+                              <p className="mt-2 text-xs leading-5 text-muted">
                                 The full-quality original in Backblaze B2. It is never served to
                                 viewers — preview it here, or pull it back to disk to re-cut.
                               </p>
@@ -2429,21 +2426,21 @@ export default function PlayerPage() {
                                 <button
                                   onClick={() => void handlePreviewArchive()}
                                   disabled={isLoadingArchivePreview || isRetrievingArchive}
-                                  className="rounded-control border border-white/12 bg-white/[.06] px-3 py-1.5 text-xs font-semibold text-ink-strong transition hover:bg-white/[.1] disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="rounded-control border border-white/12 bg-white/[.06] px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-white/[.1] disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {isLoadingArchivePreview ? 'Signing…' : 'Preview master'}
                                 </button>
                                 <button
                                   onClick={() => void handleRetrieveArchive()}
                                   disabled={isRetrievingArchive || isLoadingArchivePreview}
-                                  className="rounded-control border border-white/12 bg-white/[.06] px-3 py-1.5 text-xs font-semibold text-ink-strong transition hover:bg-white/[.1] disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="rounded-control border border-white/12 bg-white/[.06] px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-white/[.1] disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {isRetrievingArchive ? 'Retrieving…' : 'Retrieve for processing'}
                                 </button>
                               </div>
 
                               {isRetrievingArchive && (
-                                <p className="mt-2 text-xs leading-5 text-ink-muted">
+                                <p className="mt-2 text-xs leading-5 text-muted">
                                   Downloading the master to the working folder. Large camera files
                                   take a while — progress is in the pipeline console.
                                 </p>
@@ -2457,7 +2454,7 @@ export default function PlayerPage() {
                                     controls
                                     className="w-full rounded-card border border-white/10 bg-black"
                                   />
-                                  <p className="mt-2 text-xs text-ink-dim">
+                                  <p className="mt-2 text-xs text-dim">
                                     This preview link is scoped to this one file and expires in{' '}
                                     {Math.round(archivePreview.expiresInSeconds / 60)} minutes.
                                   </p>
@@ -2471,7 +2468,7 @@ export default function PlayerPage() {
                               )}
                             </>
                           ) : (
-                            <p className="text-xs leading-5 text-ink-muted">
+                            <p className="text-xs leading-5 text-muted">
                               This asset has no archived master in Backblaze B2. Only assets
                               ingested through the pipeline carry one.
                             </p>
@@ -2481,20 +2478,20 @@ export default function PlayerPage() {
                         {(selectedVideo.tags.length > 0 ||
                           (selectedVideo.playlistTitles?.length ?? 0) > 0 ||
                           selectedVideo.series) && (
-                          <div className="rounded-[13px] border border-white/[.07] bg-surface-well p-4">
-                            <p className="mb-3 text-overline uppercase text-ink-dim">
+                          <div className="rounded-[13px] border border-white/[.07] bg-ink-raised p-4">
+                            <p className="mb-3 font-condensed text-overline uppercase text-dim">
                               Tags
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               {selectedVideo.series && (
-                                <span className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-ink-strong">
+                                <span className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-body">
                                   Series: {selectedVideo.series}
                                 </span>
                               )}
                               {(selectedVideo.playlistTitles ?? []).map((playlistTitle) => (
                                 <span
                                   key={playlistTitle}
-                                  className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-ink-strong"
+                                  className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-body"
                                 >
                                   {playlistTitle}
                                 </span>
@@ -2502,7 +2499,7 @@ export default function PlayerPage() {
                               {selectedVideo.tags.map((tag) => (
                                 <span
                                   key={tag}
-                                  className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-ink-strong"
+                                  className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-body"
                                 >
                                   #{tag}
                                 </span>
@@ -2518,15 +2515,15 @@ export default function PlayerPage() {
                         <div className="rounded-card border border-white/10 bg-white/5 p-4">
                           <div className="flex flex-col gap-3">
                             <div>
-                              <h3 className="text-base font-semibold text-ink">Metadata Editor</h3>
-                              <p className="mt-1 text-xs text-ink-muted">
+                              <h3 className="text-base font-semibold text-paper">Metadata Editor</h3>
+                              <p className="mt-1 text-xs text-muted">
                                 Publish state, descriptive copy, and library organization all live here.
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <button
                                 onClick={() => void handleSaveMetadata('draft')}
-                                className="rounded-control border border-state-processing/30 bg-state-processing/[.12] px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-control border border-state-warn/30 bg-state-warn/[.12] px-3 py-1.5 text-xs font-semibold text-state-warn transition hover:bg-state-warn/15 disabled:cursor-not-allowed disabled:opacity-60"
                                 disabled={isSavingMetadata || isDeletingVideo}
                                 type="button"
                               >
@@ -2534,7 +2531,7 @@ export default function PlayerPage() {
                               </button>
                               <button
                                 onClick={() => void handleSaveMetadata('ready')}
-                                className="rounded-control bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-control bg-accent px-3 py-1.5 text-xs font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
                                 disabled={isSavingMetadata || isDeletingVideo}
                                 type="button"
                               >
@@ -2546,7 +2543,7 @@ export default function PlayerPage() {
 
                         <div className="space-y-4">
                           <div>
-                            <label className="mb-2 block text-overline uppercase text-ink-dim">
+                            <label className="mb-2 block font-condensed text-overline uppercase text-dim">
                               Title
                             </label>
                             <input
@@ -2561,7 +2558,7 @@ export default function PlayerPage() {
 
                           <div className="grid gap-4 sm:grid-cols-2">
                             <div>
-                              <label className="mb-2 block text-overline uppercase text-ink-dim">
+                              <label className="mb-2 block font-condensed text-overline uppercase text-dim">
                                 Status
                               </label>
                               <select
@@ -2583,7 +2580,7 @@ export default function PlayerPage() {
                             </div>
 
                             <div>
-                              <label className="mb-2 block text-overline uppercase text-ink-dim">
+                              <label className="mb-2 block font-condensed text-overline uppercase text-dim">
                                 Recorded At
                               </label>
                               <input
@@ -2599,12 +2596,12 @@ export default function PlayerPage() {
                           </div>
 
                           <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                            <p className="text-overline uppercase text-ink-dim">
+                            <p className="font-condensed text-overline uppercase text-dim">
                               Lawn Workflow
                             </p>
                             <div className="mt-4 grid gap-4 sm:grid-cols-2">
                               <div>
-                                <label className="mb-2 block text-overline uppercase text-ink-dim">
+                                <label className="mb-2 block font-condensed text-overline uppercase text-dim">
                                   Review Status
                                 </label>
                                 <select
@@ -2629,7 +2626,7 @@ export default function PlayerPage() {
                           </div>
 
                           <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                            <p className="text-overline uppercase text-ink-dim">
+                            <p className="font-condensed text-overline uppercase text-dim">
                               Ingest Metadata
                             </p>
                             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -2640,7 +2637,7 @@ export default function PlayerPage() {
                                 ['Source Node', 'sourceNode', 'local vMix'],
                               ] as const).map(([label, key, placeholder]) => (
                                 <div key={key}>
-                                  <label className="mb-2 block text-overline uppercase text-ink-dim">
+                                  <label className="mb-2 block font-condensed text-overline uppercase text-dim">
                                     {label}
                                   </label>
                                   <input
@@ -2690,7 +2687,7 @@ export default function PlayerPage() {
                           />
 
                           <div>
-                            <label className="mb-2 block text-overline uppercase text-ink-dim">
+                            <label className="mb-2 block font-condensed text-overline uppercase text-dim">
                               Description
                             </label>
                             <textarea
@@ -2708,15 +2705,15 @@ export default function PlayerPage() {
                         <div className="rounded-card border border-white/10 bg-white/5 p-4">
                           <button
                             onClick={() => void handleSaveMetadata()}
-                            className="w-full rounded-control bg-secondary-500 px-4 py-2.5 text-sm font-semibold text-secondary-950 transition hover:bg-secondary-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="w-full rounded-control bg-state-ok px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-state-ok disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={isSavingMetadata || isDeletingVideo}
                             type="button"
                           >
                             {isSavingMetadata ? 'Saving...' : 'Save Metadata'}
                           </button>
-                          <p className="mt-2 text-xs text-ink-muted">
-                            Publish moves the record to <span className="font-semibold text-ink">ready</span>.
-                            Unpublish returns it to <span className="font-semibold text-ink">draft</span>.
+                          <p className="mt-2 text-xs text-muted">
+                            Publish moves the record to <span className="font-semibold text-paper">ready</span>.
+                            Unpublish returns it to <span className="font-semibold text-paper">draft</span>.
                           </p>
                         </div>
 
@@ -2724,14 +2721,14 @@ export default function PlayerPage() {
                           <div className="flex flex-col gap-3">
                             <div>
                               <h3 className="text-sm font-semibold text-state-danger">Danger Zone</h3>
-                              <p className="mt-1 text-xs leading-5 text-red-100/75">
+                              <p className="mt-1 text-xs leading-5 text-state-danger/80">
                                 Delete removes this asset from the Convex library and removes linked cloud assets where
                                 available.
                               </p>
                             </div>
                             <button
                               onClick={() => void handleDeleteVideo()}
-                              className="rounded-control border border-red-300/30 bg-red-300/10 px-4 py-2 text-xs font-semibold text-state-danger transition hover:bg-red-300/15 disabled:cursor-not-allowed disabled:opacity-60 sm:self-start"
+                              className="rounded-control border border-state-danger/30 bg-state-danger/10 px-4 py-2 text-xs font-semibold text-state-danger transition hover:bg-state-danger/15 disabled:cursor-not-allowed disabled:opacity-60 sm:self-start"
                               disabled={isSavingMetadata || isDeletingVideo}
                               type="button"
                             >
@@ -2747,15 +2744,15 @@ export default function PlayerPage() {
                         <div className="rounded-card border border-white/10 bg-white/5 p-4">
                           <div className="flex flex-col gap-3">
                             <div>
-                              <h3 className="text-base font-semibold text-ink">Poster Image</h3>
-                              <p className="mt-1 text-xs text-ink-muted">
+                              <h3 className="text-base font-semibold text-paper">Poster Image</h3>
+                              <p className="mt-1 text-xs text-muted">
                                 Generate new frame options from the stored playback asset, then push the selected
                                 poster back to cloud storage and Convex.
                               </p>
                             </div>
                             <button
                               onClick={() => void handleGeneratePosterCandidates()}
-                              className="rounded-control border border-primary-500/40 bg-primary-500/[.13] px-4 py-2 text-xs font-semibold text-primary-200 transition hover:bg-primary-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-control border border-accent/40 bg-accent/[.13] px-4 py-2 text-xs font-semibold text-accent-hi transition hover:bg-accent-hi/15 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={!previewAvailable || !playableSourceUrl || isGeneratingPosterCandidates}
                               type="button"
                             >
@@ -2765,7 +2762,7 @@ export default function PlayerPage() {
                         </div>
 
                         <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                          <p className="text-overline uppercase text-ink-dim">
+                          <p className="font-condensed text-overline uppercase text-dim">
                             Current Poster
                           </p>
                           {selectedVideo.posterUrl ? (
@@ -2775,14 +2772,14 @@ export default function PlayerPage() {
                               className="mt-3 aspect-video w-full rounded-control object-cover"
                             />
                           ) : (
-                            <div className="mt-3 flex aspect-video items-center justify-center rounded-control border border-dashed border-white/10 text-overline uppercase text-ink-dim">
+                            <div className="mt-3 flex aspect-video items-center justify-center rounded-control border border-dashed border-white/10 font-condensed text-overline uppercase text-dim">
                               No Poster
                             </div>
                           )}
                         </div>
 
                         {posterCandidates.length === 0 ? (
-                          <div className="rounded-card border border-dashed border-white/10 p-5 text-xs text-ink-muted">
+                          <div className="rounded-card border border-dashed border-white/10 p-5 text-xs text-muted">
                             Generate poster options to review frame candidates here.
                           </div>
                         ) : (
@@ -2798,7 +2795,7 @@ export default function PlayerPage() {
                                     type="button"
                                     className={`overflow-hidden rounded-card border text-left transition ${
                                       isCandidateSelected
-                                        ? 'border-primary-500/40 bg-primary-500/[.13] shadow-[0_14px_32px_rgba(14,121,178,.35)]'
+                                        ? 'border-accent/40 bg-accent/[.13] shadow-[0_14px_32px_rgba(238,21,24,.35)]'
                                         : 'border-white/10 bg-white/5 hover:border-white/20'
                                     }`}
                                   >
@@ -2808,10 +2805,10 @@ export default function PlayerPage() {
                                       className="aspect-video w-full object-cover"
                                     />
                                     <div className="p-2.5">
-                                      <p className="text-overline uppercase text-ink-dim">
+                                      <p className="font-condensed text-overline uppercase text-dim">
                                         Candidate
                                       </p>
-                                      <p className="mt-0.5 text-xs font-semibold text-ink">{candidate.label}</p>
+                                      <p className="mt-0.5 text-xs font-semibold text-paper">{candidate.label}</p>
                                     </div>
                                   </button>
                                 );
@@ -2821,13 +2818,13 @@ export default function PlayerPage() {
                             <div className="rounded-card border border-white/10 bg-white/5 p-4">
                               <button
                                 onClick={() => void handleApplyPoster()}
-                                className="w-full rounded-control bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="w-full rounded-control bg-accent px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
                                 disabled={!selectedPosterCandidate || isApplyingPoster}
                                 type="button"
                               >
                                 {isApplyingPoster ? 'Applying Poster...' : 'Apply Selected Poster'}
                               </button>
-                              <p className="mt-2 text-xs text-ink-muted">
+                              <p className="mt-2 text-xs text-muted">
                                 {selectedPosterCandidate
                                   ? `Selected frame ${selectedPosterCandidate.label}.`
                                   : 'Choose a candidate frame before applying the new poster.'}
@@ -2842,8 +2839,8 @@ export default function PlayerPage() {
               ) : (
                 <div className="flex flex-1 items-center justify-center p-6 text-center">
                   <div className="max-w-sm">
-                    <h3 className="text-section text-ink">No asset selected</h3>
-                    <p className="mt-2 text-xs leading-5 text-ink-muted">
+                    <h3 className="font-display text-section text-paper">No asset selected</h3>
+                    <p className="mt-2 text-xs leading-5 text-muted">
                       Choose a card from the gallery to open playback, metadata, and poster controls in this panel.
                     </p>
                   </div>

@@ -1,5 +1,5 @@
 /**
- * Spool icon set — Feather/Lucide-style outline icons drawn inline.
+ * Icon set — Feather/Lucide-style outline icons drawn inline.
  * Stroke width sits at 1.9–2.2 across the system; sizes default to the value
  * used at that icon's primary call site.
  */

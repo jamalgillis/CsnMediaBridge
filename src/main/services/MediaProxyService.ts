@@ -16,6 +16,7 @@ const MEDIA_MIME_TYPES: Record<string, string> = {
   '.mov': 'video/quicktime',
   '.mp3': 'audio/mpeg',
   '.mp4': 'video/mp4',
+  '.mpd': 'application/dash+xml',
   '.ts': 'video/mp2t',
   '.wav': 'audio/wav',
   '.webm': 'video/webm',

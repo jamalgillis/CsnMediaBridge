@@ -1,20 +1,38 @@
+@import './assets/fonts/fonts.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /*
- * Spool design system — dark only.
- * Tokens mirror `Spool - Design System - Teal.dc.html`; see data/config/colors.js.
+ * CSN v2 design system — dark only.
+ *
+ * The tokens, type voice and component shapes here mirror the sports site
+ * (`Websites/csn`, apps/web + components/site). Anything that looks like chrome
+ * on the site — the accent underline on active nav, the condensed uppercase
+ * label, the Anton display numeral, the pill filter chip — is reproduced rather
+ * than reinvented, so the desktop app reads as the same product. See
+ * data/config/colors.js for the palette.
+ *
+ * The faces are the site's own woff2 files, copied from `csn/ds-bundle/fonts`,
+ * because a packaged Electron app cannot reach the Google Fonts CDN offline.
  */
 
 @layer base {
+  :root {
+    /* Hairlines, named as on the site so ported markup keeps working. */
+    --rule: rgba(255, 255, 255, 0.09);
+    --rule-soft: rgba(255, 255, 255, 0.07);
+    --rule-strong: rgba(255, 255, 255, 0.16);
+  }
+
   html {
-    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+    font-family: 'Barlow', system-ui, sans-serif;
     font-size: 14px;
   }
 
   body {
-    @apply bg-surface-canvas text-ink antialiased;
+    @apply bg-ink text-paper antialiased;
     margin: 0;
     font-size: 14px;
     line-height: 1.5;
@@ -30,8 +48,8 @@
   }
 
   ::-webkit-scrollbar {
-    width: 11px;
-    height: 11px;
+    width: 8px;
+    height: 8px;
   }
 
   ::-webkit-scrollbar-track {
@@ -39,31 +57,30 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.11);
-    border-radius: 9px;
-    border: 3px solid #0a0b0e;
+    background: #2a2a2a;
+    border-radius: 8px;
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.11) transparent;
+    scrollbar-color: #2a2a2a transparent;
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: #5c6573;
+    color: #5a5a5a;
   }
 
   select {
     appearance: none;
   }
 
-  /* Native checkboxes/radios pick up the action color instead of browser blue. */
+  /* Native checkboxes/radios pick up the brand red instead of browser blue. */
   input[type='checkbox'],
   input[type='radio'],
   input[type='range'],
   progress {
-    accent-color: #0e79b2;
+    accent-color: #ee1518;
   }
 
   button,
@@ -73,250 +90,286 @@
     font: inherit;
   }
 
-  /* Numerics are always mono — counts, durations, sizes, timecodes, IDs. */
+  /* CSN sets numerics in Barlow with tabular figures rather than in a mono
+     face, so every column of counts, sizes and timecodes still lines up. */
   input[type='number'],
   input[type='date'],
   input[type='time'],
   input[type='datetime-local'] {
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
   }
 
   ::selection {
-    background: rgba(14, 121, 178, 0.35);
-    color: #edeef1;
+    background: #ee1518;
+    color: #fbfef9;
   }
 }
 
 @layer components {
   /* ---------- Buttons ---------- */
-  .spool-btn {
+  /* Actions carry the site's button voice: uppercase, bold, letter-spaced,
+     squared to 4px. Only the primary one is filled with the accent. */
+  .csn-btn {
     @apply inline-flex h-control flex-none cursor-pointer items-center justify-center gap-[7px]
-      rounded-control px-4 text-body font-semibold transition
+      rounded-[4px] px-4 text-[13px] font-bold uppercase tracking-[.06em] transition-colors
       disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  .spool-btn-primary {
-    @apply spool-btn border-none bg-primary-500 text-white hover:bg-primary-600;
+  .csn-btn-primary {
+    @apply csn-btn border-none bg-accent text-paper hover:bg-accent-hi;
   }
 
-  .spool-btn-secondary {
-    @apply spool-btn border border-surface-hairline-strong bg-surface-field text-ink-strong
-      hover:border-white/[.22];
+  .csn-btn-secondary {
+    @apply csn-btn bg-transparent text-paper shadow-[inset_0_0_0_1px_var(--rule-strong)]
+      hover:shadow-[inset_0_0_0_1px_theme(colors.accent.DEFAULT)] hover:text-accent;
   }
 
-  .spool-btn-ghost {
-    @apply spool-btn border border-transparent bg-transparent text-ink-muted
-      hover:bg-surface-raised hover:text-ink;
+  .csn-btn-ghost {
+    @apply csn-btn border border-transparent bg-transparent text-muted
+      hover:bg-white/[.06] hover:text-paper;
   }
 
-  /* Sage is only ever clip / notify. */
-  .spool-btn-accent {
-    @apply inline-flex flex-none cursor-pointer items-center gap-1.5 rounded-chip border-none
-      bg-secondary-500/[.13] px-[13px] py-2 text-control font-semibold text-secondary-300
-      transition hover:bg-secondary-500/20 disabled:cursor-not-allowed disabled:opacity-50;
+  /* Outlined capsule — the site's GhostButton ("Open feed", "All shows"). */
+  .csn-btn-capsule {
+    @apply inline-flex flex-none cursor-pointer items-center gap-1.5 rounded-full border
+      border-rule-strong px-3.5 py-2 text-xs font-bold uppercase tracking-[.08em] text-paper
+      transition-colors hover:border-accent hover:text-accent
+      disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  .spool-btn-danger {
-    @apply spool-btn border border-state-danger/30 bg-state-danger/[.12] text-state-danger
+  /* Confirming action (export, publish, install update). Green reads as "done"
+     in the queue, but it is never a filled block — the only filled button in
+     this palette is the accent one, as on the site. */
+  .csn-btn-accent {
+    @apply inline-flex h-control flex-none cursor-pointer items-center justify-center gap-1.5
+      rounded-[4px] bg-transparent px-[13px] text-[13px] font-bold uppercase tracking-[.06em]
+      text-state-ok shadow-[inset_0_0_0_1px_theme(colors.state.ok/40%)] transition-colors
+      hover:bg-state-ok/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .csn-btn-danger {
+    @apply csn-btn border border-state-danger/40 bg-state-danger/[.12] text-state-danger
       hover:bg-state-danger/20;
   }
 
-  .spool-icon-btn {
+  .csn-icon-btn {
     @apply flex h-control w-control flex-none cursor-pointer items-center justify-center
-      rounded-control border border-surface-hairline-strong bg-surface-field text-ink-muted
-      transition hover:border-white/[.22] hover:text-ink
+      rounded-[4px] text-muted shadow-[inset_0_0_0_1px_var(--rule-strong)] transition-colors
+      hover:text-paper hover:shadow-[inset_0_0_0_1px_theme(colors.accent.DEFAULT)]
       disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* Small inline action square, used on card footers and list rows. */
-  .spool-quiet-btn {
-    @apply flex flex-none cursor-pointer items-center justify-center rounded-chip border-none
-      bg-white/[.05] text-ink-muted transition hover:bg-primary-500/[.18] hover:text-primary-200;
+  .csn-quiet-btn {
+    @apply flex flex-none cursor-pointer items-center justify-center rounded-[4px] border-none
+      bg-white/[.05] text-muted transition-colors hover:bg-accent/20 hover:text-accent-hi;
   }
 
   /* ---------- Chips & tabs ---------- */
-  .spool-chip {
-    @apply cursor-pointer whitespace-nowrap rounded-[9px] border px-3.5 py-[7px] text-control
-      font-semibold transition;
+  /* The site's FilterChip: a round-bordered capsule that goes red when on. */
+  .csn-chip {
+    @apply cursor-pointer whitespace-nowrap rounded-full border px-[13px] py-[7px] text-xs
+      font-bold uppercase tracking-[.05em] transition-colors;
   }
 
-  .spool-chip-off {
-    @apply spool-chip border-white/[.09] bg-surface-field text-ink-muted hover:text-ink;
+  .csn-chip-off {
+    @apply csn-chip border-rule-strong text-muted hover:border-accent hover:text-paper;
   }
 
-  .spool-chip-on {
-    @apply spool-chip border-primary-500/50 bg-primary-500/[.16] text-primary-200;
+  .csn-chip-on {
+    @apply csn-chip border-accent bg-accent/[.12] text-paper;
   }
 
-  .spool-tab {
-    @apply -mb-px cursor-pointer border-none border-b-2 border-b-transparent bg-none px-0.5 py-3
-      text-body font-medium text-ink-muted transition hover:text-ink-strong;
+  /* UnderlineTabs: condensed uppercase, active marked by an inset accent rule. */
+  .csn-tab {
+    @apply -mb-px flex cursor-pointer items-center gap-[7px] border-none bg-none px-0.5 py-3.5
+      font-condensed text-[15px] font-bold uppercase tracking-[.1em] text-muted
+      transition-colors hover:text-paper;
   }
 
-  .spool-tab-on {
-    @apply spool-tab border-b-primary-500 font-bold text-ink;
+  .csn-tab-on {
+    @apply csn-tab text-paper shadow-tab;
   }
 
   /* ---------- Surfaces ---------- */
-  .spool-card {
-    @apply rounded-card border border-surface-hairline bg-surface-card;
+  /* Site cards are hairline-ruled panels, not floating glass. */
+  .csn-card {
+    @apply rounded-card border border-rule bg-ink-panel;
   }
 
-  .spool-panel {
-    @apply rounded-card border border-surface-hairline bg-surface-card p-5;
+  .csn-panel {
+    @apply rounded-card border border-rule bg-ink-panel p-5;
   }
 
-  .spool-well {
-    @apply rounded-panel border border-white/[.06] bg-surface-well;
+  .csn-well {
+    @apply rounded-card border border-rule-soft bg-ink-raised;
   }
 
-  .spool-pop {
-    @apply z-30 rounded-panel border border-surface-hairline-strong bg-surface-elevated p-1.5
-      shadow-pop animate-spoolin-fast;
+  .csn-pop {
+    @apply z-30 rounded-card border border-rule-strong bg-ink-chip p-1.5 shadow-pop
+      animate-csnfade-fast;
   }
 
-  .spool-rule {
-    @apply h-6 w-px flex-none bg-white/[.09];
+  .csn-rule {
+    @apply h-6 w-px flex-none bg-[var(--rule)];
   }
 
   /* ---------- Form fields ---------- */
-  .spool-field {
-    @apply flex h-control w-full items-center gap-[9px] rounded-control border
-      border-surface-hairline bg-surface-field px-3 text-body text-ink outline-none transition
-      focus-within:border-primary-500/60;
+  .csn-field {
+    @apply flex h-control w-full items-center gap-[9px] rounded-[4px] border border-rule
+      bg-ink-tile px-3 text-copy text-paper outline-none transition-colors
+      focus-within:border-accent;
   }
 
-  .spool-input {
-    @apply h-control w-full rounded-control border border-surface-hairline bg-surface-field px-3
-      text-body text-ink outline-none transition placeholder:text-ink-dim
-      focus:border-primary-500/60 disabled:cursor-not-allowed disabled:opacity-60;
+  .csn-input {
+    @apply h-control w-full rounded-[4px] border border-rule bg-ink-tile px-3 text-copy
+      text-paper outline-none transition-colors placeholder:text-faint focus:border-accent
+      disabled:cursor-not-allowed disabled:opacity-60;
   }
 
-  .spool-textarea {
-    @apply w-full rounded-control border border-surface-hairline bg-surface-field px-3 py-2.5
-      text-body leading-relaxed text-ink outline-none transition placeholder:text-ink-dim
-      focus:border-primary-500/60;
+  .csn-textarea {
+    @apply w-full rounded-[4px] border border-rule bg-ink-tile px-3 py-2.5 text-copy
+      leading-relaxed text-paper outline-none transition-colors placeholder:text-faint
+      focus:border-accent;
   }
 
-  .spool-select {
-    @apply h-control cursor-pointer rounded-control border border-surface-hairline
-      bg-surface-field pl-3.5 pr-8 text-control text-ink-muted outline-none transition
-      focus:border-primary-500/60;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%235C6573' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  .csn-select {
+    @apply h-control cursor-pointer rounded-[4px] border border-rule bg-ink-tile pl-3.5 pr-8
+      text-control text-body outline-none transition-colors focus:border-accent;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%236B6B6B' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 11px center;
   }
 
-  .spool-label {
-    @apply mb-1.5 block text-overline uppercase text-ink-dim;
+  .csn-label {
+    @apply mb-1.5 block font-condensed text-overline uppercase text-muted;
   }
 
   /* Keyboard hint / unit suffix, e.g. ⌘K */
-  .spool-kbd {
-    @apply flex-none rounded-[5px] border border-surface-hairline-strong px-[5px] py-px
-      font-mono text-micro text-ink-dim;
+  .csn-kbd {
+    @apply flex-none rounded-[3px] border border-rule-strong px-[5px] py-px text-micro
+      font-bold text-dim;
   }
 
   /* ---------- Status ---------- */
-  .spool-status {
-    @apply inline-flex flex-none items-center gap-1.5 rounded-badge px-2 py-0.5 font-mono
-      text-micro font-semibold;
+  /* The site's micro badge: 10px, bold, wide-tracked, squared to 3px. */
+  .csn-status {
+    @apply inline-flex flex-none items-center gap-1.5 rounded-badge px-2 py-[3px] text-[10px]
+      font-bold uppercase tracking-[.1em];
   }
 
-  .spool-status-ready {
-    @apply spool-status bg-state-posted/[.16] text-state-posted;
+  .csn-status-ready {
+    @apply csn-status bg-state-ok/[.16] text-state-ok;
   }
 
-  .spool-status-processing {
-    @apply spool-status bg-state-processing/[.16] text-state-processing;
+  .csn-status-processing {
+    @apply csn-status bg-state-warn/[.16] text-state-warn;
   }
 
-  .spool-status-draft {
-    @apply spool-status bg-white/[.08] text-ink-muted;
+  .csn-status-draft {
+    @apply csn-status bg-white/[.08] text-muted;
   }
 
-  .spool-status-published {
-    @apply spool-status bg-primary-500/[.18] text-primary-200;
+  .csn-status-published {
+    @apply csn-status bg-accent text-paper;
   }
 
-  .spool-status-failed {
-    @apply spool-status bg-state-danger/[.16] text-state-danger;
+  .csn-status-failed {
+    @apply csn-status bg-state-danger/[.16] text-state-danger;
   }
 
   /* Bordered variant used standalone (outside a thumbnail overlay). */
-  .spool-pill {
-    @apply inline-flex flex-none items-center gap-1.5 rounded-chip border px-[9px] py-1
-      font-mono text-micro font-bold uppercase;
+  .csn-pill {
+    @apply inline-flex flex-none items-center gap-1.5 rounded-badge border px-[7px] py-[3px]
+      text-[10px] font-bold uppercase tracking-[.1em];
   }
 
-  .spool-badge-count {
-    @apply flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-[9px]
-      bg-secondary-500 px-[5px] font-mono text-[10.5px] font-bold text-white;
+  .csn-badge-count {
+    @apply flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-full
+      bg-accent px-[5px] text-[10px] font-bold tabular-nums text-paper;
   }
 
-  .spool-tag {
-    @apply flex-none rounded-[5px] border border-surface-hairline-strong px-1.5 py-0.5 font-mono
-      text-[9.5px] tracking-[.04em] text-ink-faint;
+  .csn-tag {
+    @apply flex-none rounded-badge border border-rule-strong px-1.5 py-0.5 font-condensed
+      text-[10px] font-bold uppercase tracking-[.12em] text-dim;
   }
 
   /* ---------- Sidebar nav ---------- */
-  .spool-nav {
-    @apply flex w-full cursor-pointer items-center gap-[11px] rounded-[9px] border
-      border-transparent px-2.5 py-2 text-left text-body font-medium text-ink-muted
-      transition-colors hover:bg-surface-raised;
+  /* The site marks the current section with an inset accent rule and white
+     type; everything else is muted. The rail does the same, vertically. */
+  .csn-nav {
+    @apply flex w-full cursor-pointer items-center gap-[11px] rounded-[4px] px-2.5 py-2
+      text-left font-condensed text-[15px] font-bold uppercase tracking-[.09em] text-muted
+      transition-colors hover:bg-white/[.05] hover:text-paper;
   }
 
-  .spool-nav-on {
-    @apply spool-nav border-primary-500/50 bg-primary-500/[.16] font-semibold text-primary-200;
+  .csn-nav-on {
+    @apply csn-nav bg-white/[.05] font-bold text-paper shadow-[inset_3px_0_0_0_theme(colors.accent.DEFAULT)];
   }
 
-  .spool-section-label {
-    @apply px-[11px] pb-2 pt-4 text-overline uppercase text-ink-dim;
+  .csn-section-label {
+    @apply px-[11px] pb-2 pt-4 font-condensed text-overline uppercase text-dim;
   }
 
   /* ---------- Thumbnails ---------- */
-  /* Scanline + vignette pair, layered over the per-asset gradient. */
-  .spool-scanline {
+  /* The site darkens media from the bottom so overlaid type stays readable. */
+  .csn-scrim {
     @apply pointer-events-none absolute inset-0;
-    background: repeating-linear-gradient(
-      0deg,
-      rgba(0, 0, 0, 0) 0,
-      rgba(0, 0, 0, 0) 2px,
-      rgba(0, 0, 0, 0.07) 3px
-    );
+    background: linear-gradient(to top, rgba(5, 5, 5, 0.86), rgba(5, 5, 5, 0) 60%);
   }
 
-  .spool-vignette {
-    @apply pointer-events-none absolute inset-0;
-    background: radial-gradient(62% 60% at 50% 42%, rgba(255, 255, 255, 0.13), transparent 70%);
-  }
-
-  .spool-play {
+  .csn-play {
     @apply absolute left-1/2 top-1/2 flex h-[42px] w-[42px] -translate-x-1/2 -translate-y-1/2
-      items-center justify-center rounded-full border border-white/[.28] bg-surface-canvas/[.45]
+      items-center justify-center rounded-full border border-white/[.28] bg-ink/[.45]
       backdrop-blur-[7px];
   }
 
-  .spool-timecode {
-    @apply absolute bottom-[9px] right-[9px] rounded-[5px] bg-[rgba(8,9,12,.78)] px-1.5 py-0.5
-      font-mono text-count text-ink;
+  .csn-timecode {
+    @apply absolute bottom-2.5 right-2.5 rounded-[2px] bg-ink/80 px-1.5 py-[3px] text-[10px]
+      font-bold tabular-nums text-paper;
   }
 
   /* Kind badge (VOD / Short) on a thumbnail corner. */
-  .spool-kind {
-    @apply rounded-badge border border-white/[.18] bg-[rgba(8,9,12,.62)] px-2 py-0.5 font-mono
-      text-micro font-bold tracking-[.03em] text-ink-strong;
+  .csn-kind {
+    @apply rounded-[3px] bg-ink/[.78] px-2 py-[5px] text-[10px] font-bold uppercase
+      tracking-[.12em] text-mid;
   }
 
-  .spool-kind-short {
-    @apply rounded-badge border-none bg-secondary-500/90 px-2 py-0.5 font-mono text-micro
-      font-bold tracking-[.03em] text-white;
+  .csn-kind-short {
+    @apply rounded-[3px] bg-accent px-2 py-[5px] text-[10px] font-bold uppercase
+      tracking-[.12em] text-paper;
   }
 }
 
 @layer utilities {
-  .spool-mono {
-    @apply font-mono text-count text-ink-dim;
+  /* The site's `label` utility: the condensed uppercase voice. */
+  .label {
+    font-family: 'Barlow Condensed', 'Barlow', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* `.font-mono` maps to Barlow with tabular figures — CSN has no mono face in
+     the UI, and every numeric column in this app relies on figures aligning. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .csn-mono {
+    @apply text-count tabular-nums text-dim;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -324,49 +377,52 @@
 
 .stored-video-player {
   overflow: hidden;
-  border-radius: 13px;
-  background: #0e1014;
+  border-radius: 8px;
+  background: #141414;
 }
 
-.stored-video-player__skin {
-  display: block;
+.stored-video-player .plyr,
+.trim-video-player .plyr {
+  --plyr-color-main: #ee1518;
+  --plyr-video-background: #141414;
+  --plyr-video-control-color: #fbfef9;
+  --plyr-video-control-color-hover: #fbfef9;
+  --plyr-video-control-background-hover: rgba(238, 21, 24, 0.78);
+  --plyr-control-radius: 8px;
+  --plyr-menu-background: #1c1c1c;
+  --plyr-menu-color: #fbfef9;
+  --plyr-menu-border-color: rgba(255, 255, 255, 0.1);
+  --plyr-tooltip-background: #1c1c1c;
+  --plyr-tooltip-color: #fbfef9;
   width: 100%;
   aspect-ratio: 16 / 9;
-  background: transparent;
-  --media-border-radius: 13px;
-  --media-video-border-radius: 13px;
-  --media-color-primary: #edeef1;
-  --media-controls-transition-duration: 180ms;
-  --media-controls-transition-timing-function: ease-out;
-  --media-popup-transition-duration: 150ms;
-  --media-popup-transition-timing-function: ease-out;
-  --media-surface-background-color: rgba(10, 11, 14, 0.82);
-  --media-surface-backdrop-filter: blur(14px);
-  --media-surface-outer-border-color: rgba(255, 255, 255, 0.1);
-  --media-surface-inner-border-color: rgba(255, 255, 255, 0.07);
-  --media-surface-shadow-color: rgba(0, 0, 0, 0.55);
+  border-radius: 8px;
 }
 
-.stored-video-player__skin video {
+.stored-video-player video,
+.trim-video-player video {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #0e1014;
+  background: #141414;
 }
 
-.stored-video-player__skin.media-default-skin .media-overlay {
-  background-image: linear-gradient(to top, rgba(8, 9, 12, 0.8), rgba(8, 9, 12, 0));
-}
-
-.stored-video-player__skin.media-default-skin .media-controls {
-  border-radius: 12px;
-  background: rgba(10, 11, 14, 0.82);
+.stored-video-player .plyr--video .plyr__controls,
+.trim-video-player .plyr--video .plyr__controls {
+  border-radius: 8px;
+  background: rgba(5, 5, 5, 0.82);
   backdrop-filter: blur(14px);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
-.stored-video-player--hover-controls .stored-video-player__skin.media-default-skin .media-overlay,
-.stored-video-player--hover-controls .stored-video-player__skin.media-default-skin .media-controls {
+.stored-video-player .plyr__poster,
+.trim-video-player .plyr__poster {
+  background-color: #141414;
+  background-size: contain;
+}
+
+.stored-video-player--hover-controls .plyr--video .plyr__controls,
+.stored-video-player--hover-controls .plyr__control--overlaid {
   opacity: 0;
   pointer-events: none;
   transition:
@@ -374,78 +430,25 @@
     transform 180ms ease-out;
 }
 
-.stored-video-player--hover-controls .stored-video-player__skin.media-default-skin .media-controls {
+.stored-video-player--hover-controls .plyr--video .plyr__controls {
   transform: translateY(0.75rem);
 }
 
-.stored-video-player--hover-controls:hover .stored-video-player__skin.media-default-skin .media-overlay,
-.stored-video-player--hover-controls:focus-within .stored-video-player__skin.media-default-skin .media-overlay,
-.stored-video-player--hover-controls:hover .stored-video-player__skin.media-default-skin .media-controls,
-.stored-video-player--hover-controls:focus-within .stored-video-player__skin.media-default-skin .media-controls {
+.stored-video-player--hover-controls:hover .plyr--video .plyr__controls,
+.stored-video-player--hover-controls:focus-within .plyr--video .plyr__controls,
+.stored-video-player--hover-controls:hover .plyr__control--overlaid,
+.stored-video-player--hover-controls:focus-within .plyr__control--overlaid {
   opacity: 1;
   pointer-events: auto;
 }
 
-.stored-video-player--hover-controls:hover .stored-video-player__skin.media-default-skin .media-controls,
-.stored-video-player--hover-controls:focus-within .stored-video-player__skin.media-default-skin .media-controls {
+.stored-video-player--hover-controls:hover .plyr--video .plyr__controls,
+.stored-video-player--hover-controls:focus-within .plyr--video .plyr__controls {
   transform: translateY(0);
-}
-
-.stored-video-player__skin.media-default-skin .media-button--subtle:hover,
-.stored-video-player__skin.media-default-skin .media-button--subtle:focus-visible,
-.stored-video-player__skin.media-default-skin .media-button--subtle[aria-expanded='true'] {
-  background-color: rgba(14, 121, 178, 0.18);
-}
-
-.stored-video-player__skin.media-default-skin .media-button--primary {
-  background: #0e79b2;
-  color: #fff;
-}
-
-.stored-video-player__skin.media-default-skin .media-time {
-  color: #edeef1;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-}
-
-.stored-video-player__skin.media-default-skin .media-slider__track {
-  background-color: rgba(255, 255, 255, 0.12);
-}
-
-.stored-video-player__skin.media-default-skin .media-slider__fill {
-  background: #0e79b2;
-}
-
-.stored-video-player__skin.media-default-skin .media-slider__buffer {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.stored-video-player__skin.media-default-skin .media-slider__thumb {
-  background-color: #edeef1;
-}
-
-.stored-video-player__skin.media-default-skin .media-preview,
-.stored-video-player__skin.media-default-skin .media-tooltip,
-.stored-video-player__skin.media-default-skin .media-popover {
-  background: #1a1d24;
-  color: #edeef1;
 }
 
 .trim-video-player {
   overflow: hidden;
-  border-radius: 13px;
-  background: #0e1014;
-}
-
-.trim-video-player__skin {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: transparent;
-}
-
-.trim-video-player__skin video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #0e1014;
+  border-radius: 8px;
+  background: #141414;
 }

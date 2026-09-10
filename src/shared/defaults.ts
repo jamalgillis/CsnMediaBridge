@@ -5,6 +5,28 @@ export const MAX_LOG_ENTRIES = 500;
 export const MAX_JOB_HISTORY = 75;
 const DEFAULT_APP_UPDATE_BASE_URL =
   typeof __APP_UPDATE_BASE_URL__ === 'string' ? __APP_UPDATE_BASE_URL__ : '';
+const DEFAULT_B2_BUCKET = typeof __CSN_B2_BUCKET__ === 'string' ? __CSN_B2_BUCKET__ : '';
+const DEFAULT_B2_PATH_PREFIX =
+  typeof __CSN_B2_PATH_PREFIX__ === 'string' ? __CSN_B2_PATH_PREFIX__ : 'vod/archive';
+const DEFAULT_B2_S3_ENDPOINT =
+  typeof __CSN_B2_S3_ENDPOINT__ === 'string' ? __CSN_B2_S3_ENDPOINT__ : '';
+const DEFAULT_R2_ACCOUNT_ID =
+  typeof __CSN_R2_ACCOUNT_ID__ === 'string' ? __CSN_R2_ACCOUNT_ID__ : '';
+const DEFAULT_R2_BUCKET = typeof __CSN_R2_BUCKET__ === 'string' ? __CSN_R2_BUCKET__ : '';
+const DEFAULT_R2_PATH_PREFIX =
+  typeof __CSN_R2_PATH_PREFIX__ === 'string' ? __CSN_R2_PATH_PREFIX__ : 'vod/hls';
+const DEFAULT_R2_PUBLIC_BASE_URL =
+  typeof __CSN_R2_PUBLIC_BASE_URL__ === 'string' ? __CSN_R2_PUBLIC_BASE_URL__ : '';
+const DEFAULT_CONVEX_DEPLOYMENT_URL =
+  typeof __CSN_CONVEX_DEPLOYMENT_URL__ === 'string' ? __CSN_CONVEX_DEPLOYMENT_URL__ : '';
+const DEFAULT_CONVEX_MUTATION_PATH =
+  typeof __CSN_CONVEX_MUTATION_PATH__ === 'string'
+    ? __CSN_CONVEX_MUTATION_PATH__
+    : 'media/videos:createVodEntry';
+const DEFAULT_OFFLOAD_B2_PATH_PREFIX =
+  typeof __CSN_OFFLOAD_B2_PATH_PREFIX__ === 'string'
+    ? __CSN_OFFLOAD_B2_PATH_PREFIX__
+    : 'offloads';
 
 export const defaultSettings: AppSettings = {
   watchFolder: '',
@@ -24,28 +46,28 @@ export const defaultSettings: AppSettings = {
     layout: 'canonical',
   },
   b2: {
-    bucket: '',
-    pathPrefix: 'vod/archive',
+    bucket: DEFAULT_B2_BUCKET,
+    pathPrefix: DEFAULT_B2_PATH_PREFIX,
     keyId: '',
     applicationKey: '',
-    s3Endpoint: '',
+    s3Endpoint: DEFAULT_B2_S3_ENDPOINT,
   },
   r2: {
-    accountId: '',
-    bucket: '',
-    pathPrefix: 'vod/hls',
-    publicBaseUrl: '',
+    accountId: DEFAULT_R2_ACCOUNT_ID,
+    bucket: DEFAULT_R2_BUCKET,
+    pathPrefix: DEFAULT_R2_PATH_PREFIX,
+    publicBaseUrl: DEFAULT_R2_PUBLIC_BASE_URL,
     accessKeyId: '',
     secretAccessKey: '',
   },
   convex: {
-    deploymentUrl: '',
-    mutationPath: 'media/videos:createVodEntry',
+    deploymentUrl: DEFAULT_CONVEX_DEPLOYMENT_URL,
+    mutationPath: DEFAULT_CONVEX_MUTATION_PATH,
     nodeToken: '',
   },
   offload: {
     localFolder: '',
-    b2PathPrefix: 'offloads',
+    b2PathPrefix: DEFAULT_OFFLOAD_B2_PATH_PREFIX,
     localCopyMode: 'fast',
   },
   appUpdates: {

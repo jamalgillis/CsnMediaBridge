@@ -6,6 +6,9 @@ const mediaBridgeApi: MediaBridgeApi = {
   getState: () => ipcRenderer.invoke(IPC_CHANNELS.getState),
   loadSettings: () => ipcRenderer.invoke(IPC_CHANNELS.loadSettings),
   saveSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.saveSettings, settings),
+  importConnectionProfile: () => ipcRenderer.invoke(IPC_CHANNELS.importConnectionProfile),
+  exportConnectionProfile: (profileName) =>
+    ipcRenderer.invoke(IPC_CHANNELS.exportConnectionProfile, profileName),
   checkForAppUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.checkForAppUpdates),
   installAppUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.installAppUpdate),
   startWatching: () => ipcRenderer.invoke(IPC_CHANNELS.startWatching),
@@ -37,6 +40,8 @@ const mediaBridgeApi: MediaBridgeApi = {
   pauseOffloadTask: () => ipcRenderer.invoke(IPC_CHANNELS.pauseOffloadTask),
   cancelOffloadTask: () => ipcRenderer.invoke(IPC_CHANNELS.cancelOffloadTask),
   getStorageUsage: () => ipcRenderer.invoke(IPC_CHANNELS.getStorageUsage),
+  listLiveStreamHandoffJobs: () => ipcRenderer.invoke(IPC_CHANNELS.listLiveStreamHandoffJobs),
+  wakeLiveStreamHandoffWorker: () => ipcRenderer.invoke(IPC_CHANNELS.wakeLiveStreamHandoffWorker),
   onStateUpdate: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, state: Awaited<ReturnType<MediaBridgeApi['getState']>>) => {
       listener(state);
@@ -58,6 +63,19 @@ const mediaBridgeApi: MediaBridgeApi = {
     ipcRenderer.on(IPC_CHANNELS.offloadUpdated, wrappedListener);
     return () => {
       ipcRenderer.off(IPC_CHANNELS.offloadUpdated, wrappedListener);
+    };
+  },
+  onLiveStreamHandoffUpdate: (listener) => {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      jobs: Awaited<ReturnType<MediaBridgeApi['listLiveStreamHandoffJobs']>>,
+    ) => {
+      listener(jobs);
+    };
+
+    ipcRenderer.on(IPC_CHANNELS.liveStreamHandoffUpdated, wrappedListener);
+    return () => {
+      ipcRenderer.off(IPC_CHANNELS.liveStreamHandoffUpdated, wrappedListener);
     };
   },
 };

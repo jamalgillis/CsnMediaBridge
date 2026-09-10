@@ -180,12 +180,14 @@ Whether the encode ran in the browser Web Worker or on the desktop node, the
 output file is byte-for-byte the same *kind* of artifact. Only the speed and the
 size ceiling differ.
 
-### 3.2 VOD streaming — HLS
+### 3.2 VOD streaming — CMAF HLS with DASH sidecar
 
 Serving a flat MP4 to a web player wastes bandwidth and buffers on weak
-connections. For portal and article playback the pipeline produces an HLS
-package: a `master.m3u8` playlist plus segmented renditions at multiple
-resolutions, so the player adapts to the viewer's connection.
+connections. For portal and article playback the pipeline produces a
+CMAF-compatible package: a `master.m3u8` HLS playlist, a `manifest.mpd` DASH
+manifest, and one shared set of fragmented MP4 segments at multiple resolutions.
+Both manifests point at the same per-variant init files and `.m4s` files, so supporting DASH
+clients does not double playback storage.
 
 The desktop node generates the full ladder with native FFmpeg and uploads the
 package directory to R2 under `streaming/`. Mux remains a viable alternative
@@ -207,7 +209,7 @@ delivery render.
 | Output          | Format                          | Storage                      | Destination                                   |
 | --------------- | ------------------------------- | ---------------------------- | --------------------------------------------- |
 | Social clip     | Flat `.mp4` (H.264 / AAC)       | R2 `staging/` → `scheduled/` | TikTok, Reels, Shorts, Facebook, X, YouTube    |
-| VOD stream      | `.m3u8` + `.ts`/`.m4s` segments | R2 `streaming/`              | Web portal, newsroom CMS articles, app player  |
+| VOD stream      | `.m3u8` + `.mpd` + `.m4s` segments | R2 `streaming/`            | Web portal, newsroom CMS articles, app player  |
 | Poster / still  | `.jpg` / `.webp`                | R2 `posters/`, B2 `stills/`  | Thumbnails, article cards, social preview      |
 | Master archive  | Original `.mov` / `.mp4`        | B2 `masters/`                | Cold vault for re-editing and re-clipping      |
 

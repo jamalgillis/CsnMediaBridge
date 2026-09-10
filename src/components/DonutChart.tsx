@@ -66,8 +66,8 @@ export default function DonutChart({
         </svg>
         {/* Center text */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="font-mono text-[22px] font-semibold tracking-[-.02em] text-ink">{centerValue}</span>
-          <span className="mt-0.5 text-overline uppercase text-ink-dim">{centerLabel}</span>
+          <span className="font-mono text-[22px] font-semibold tracking-[-.02em] text-paper">{centerValue}</span>
+          <span className="mt-0.5 font-condensed text-overline uppercase text-dim">{centerLabel}</span>
         </div>
       </div>
 
@@ -78,7 +78,7 @@ export default function DonutChart({
           return (
             <div key={segment.label} className="flex items-center gap-1.5 text-caption">
               <span className={`inline-block h-2 w-2 rounded-full ${segment.colorClass}`} />
-              <span className="text-ink-muted">
+              <span className="text-muted">
                 <span className="font-mono">{pct}%</span> {segment.label}
               </span>
             </div>

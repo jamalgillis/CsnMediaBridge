@@ -1,0 +1,31 @@
+{
+  "profileVersion": 1,
+  "profileName": "CSN Production",
+  "storage": {
+    "layout": "canonical"
+  },
+  "b2": {
+    "bucket": "REPLACE_B2_BUCKET",
+    "pathPrefix": "vod/archive",
+    "s3Endpoint": "https://s3.us-west-004.backblazeb2.com"
+  },
+  "r2": {
+    "accountId": "REPLACE_R2_ACCOUNT_ID",
+    "bucket": "REPLACE_R2_BUCKET",
+    "pathPrefix": "vod/hls",
+    "publicBaseUrl": "https://media.example.com"
+  },
+  "convex": {
+    "deploymentUrl": "https://REPLACE.convex.cloud",
+    "mutationPath": "media/videos:createVodEntry"
+  },
+  "offload": {
+    "b2PathPrefix": "offloads"
+  },
+  "appUpdates": {
+    "enabled": false,
+    "baseUrl": "",
+    "checkIntervalMinutes": 60
+  },
+  "notes": "This profile intentionally excludes B2/R2 access keys and the Convex node token."
+}

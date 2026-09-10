@@ -1,6 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import './tauriBridge';
+import 'plyr/dist/plyr.css';
 import './index.css';
 
 const container = document.getElementById('root');

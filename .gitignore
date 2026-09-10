@@ -95,5 +95,8 @@ dist/
 # Electron-Forge
 out/
 
+# Tauri
+src-tauri/target/
+
 .env.local
 .env.local.bak*

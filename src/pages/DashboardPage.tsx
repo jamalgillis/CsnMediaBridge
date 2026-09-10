@@ -4,6 +4,7 @@ import LogConsole from '../components/LogConsole';
 import MetricCard from '../components/MetricCard';
 import GlassCard from '../components/GlassCard';
 import ManualIntakePanel from '../components/ManualIntakePanel';
+import LiveStreamHandoffPanel from '../components/LiveStreamHandoffPanel';
 import { useBridge } from '../context/BridgeContext';
 
 export default function DashboardPage() {
@@ -15,8 +16,8 @@ export default function DashboardPage() {
   return (
     <div className="px-6 pb-11 pt-[22px]">
       <div className="mb-5">
-        <h1 className="text-page text-ink">Operations</h1>
-        <p className="mt-1 text-control text-ink-muted">
+        <h1 className="font-display text-page text-paper">Operations</h1>
+        <p className="mt-1 text-control text-muted">
           Watcher, ingest queue, and system health for this workstation.
         </p>
       </div>
@@ -26,12 +27,12 @@ export default function DashboardPage() {
         <GlassCard className="border-state-danger/30 bg-state-danger/[.12]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-overline uppercase text-state-danger">Attention</p>
-              <p className="mt-2 text-body text-state-danger">{actionError}</p>
+              <p className="font-condensed text-overline uppercase text-state-danger">Attention</p>
+              <p className="mt-2 text-copy text-state-danger">{actionError}</p>
             </div>
             <button
               onClick={clearActionError}
-              className="spool-btn-danger h-9"
+              className="csn-btn-danger h-9"
             >
               Dismiss
             </button>
@@ -99,6 +100,7 @@ export default function DashboardPage() {
       <div className="grid gap-5 xl:grid-cols-12">
         <ManualIntakePanel />
         <JobMonitor />
+        <LiveStreamHandoffPanel />
         <SystemHealth />
       </div>
 

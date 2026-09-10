@@ -5,13 +5,13 @@ interface ProgressBarProps {
 }
 
 export default function ProgressBar({ label, value, variant }: ProgressBarProps) {
-  const barColor = variant === 'primary' ? 'bg-primary-500' : 'bg-secondary-500';
+  const barColor = variant === 'primary' ? 'bg-accent' : 'bg-state-ok';
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-overline uppercase text-ink-dim">{label}</span>
-        <span className="font-mono text-count font-semibold text-ink-strong">
+        <span className="font-condensed text-overline uppercase text-dim">{label}</span>
+        <span className="font-mono text-count font-semibold text-body">
           {Math.round(value)}%
         </span>
       </div>

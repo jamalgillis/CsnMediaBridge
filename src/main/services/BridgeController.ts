@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readdir, rm, stat, statfs } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, statfs, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { constants as fsConstants } from 'node:fs';
@@ -20,6 +20,8 @@ import type {
   RetrieveArchivedMasterResult,
   AppSettings,
   BridgeStateSnapshot,
+  ConnectionProfileExportResult,
+  ConnectionProfileImportResult,
   ContentType,
   DeleteStoredVideoRequest,
   DeleteStoredVideoResult,
@@ -30,6 +32,8 @@ import type {
   GenerateStoredVideoPosterCandidatesRequest,
   IngestUploadAuditSnapshot,
   IngestJobSnapshot,
+  LiveStreamHandoffJobSnapshot,
+  LiveStreamHandoffWorkerWakeResult,
   LocalTrimSourceSnapshot,
   LogEntry,
   LogLevel,
@@ -56,6 +60,7 @@ import type {
   UploadAuditObjectSnapshot,
   UploadAuditSectionSnapshot,
 } from '../../shared/types';
+import { applyConnectionProfile, buildConnectionProfile } from '../../shared/connectionProfile';
 import { IPC_CHANNELS } from '../../shared/ipc';
 import {
   buildJobFolderName,
@@ -237,6 +242,8 @@ export class BridgeController {
           (await this.mediaProxy.getProxyUrl(video.masterPlaylistUrl)) ?? video.masterPlaylistUrl,
         manifestUrl:
           (await this.mediaProxy.getProxyUrl(video.manifestUrl)) ?? video.manifestUrl,
+        dashManifestUrl:
+          (await this.mediaProxy.getProxyUrl(video.dashManifestUrl)) ?? video.dashManifestUrl,
         playbackUrl: (await this.mediaProxy.getProxyUrl(video.playbackUrl)) ?? video.playbackUrl,
         posterUrl: this.addCacheBust(
           (await this.mediaProxy.getProxyUrl(video.posterUrl)) ?? video.posterUrl,
@@ -694,6 +701,24 @@ export class BridgeController {
     return null;
   }
 
+  async listLiveStreamHandoffJobs(): Promise<LiveStreamHandoffJobSnapshot[]> {
+    return [];
+  }
+
+  async wakeLiveStreamHandoffWorker(): Promise<LiveStreamHandoffWorkerWakeResult> {
+    this.pushLog(
+      'info',
+      'convex',
+      'Live stream handoff worker is planned for the Tauri host and is not active in Electron.',
+    );
+
+    return {
+      woke: true,
+      claimedJobId: null,
+      message: 'Live stream handoff worker is not active in the Electron host.',
+    };
+  }
+
   async saveSettings(settings: AppSettings): Promise<SaveSettingsResult> {
     this.settings = this.store.saveSettings(settings);
     this.appUpdateService.applySettings(this.settings);
@@ -710,6 +735,79 @@ export class BridgeController {
     return {
       settings: this.settings,
       state: this.getState(),
+    };
+  }
+
+  async importConnectionProfile(): Promise<ConnectionProfileImportResult> {
+    const result = await dialog.showOpenDialog(this.getDialogWindow(), {
+      title: 'Import Connection Profile',
+      filters: [{ name: 'Connection Profile', extensions: ['json'] }],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled) {
+      return {
+        canceled: true,
+        profileName: null,
+        path: null,
+        settings: this.settings,
+        state: this.getState(),
+      };
+    }
+
+    const profilePath = result.filePaths[0];
+    if (!profilePath) {
+      throw new Error('No connection profile file was selected.');
+    }
+
+    const rawProfile = JSON.parse(await readFile(profilePath, 'utf8')) as unknown;
+    const nextSettings = applyConnectionProfile(this.settings, rawProfile);
+    const saveResult = await this.saveSettings(nextSettings);
+    const profileName =
+      rawProfile && typeof rawProfile === 'object' && 'profileName' in rawProfile
+        ? String((rawProfile as { profileName?: unknown }).profileName ?? 'Imported Profile')
+        : 'Imported Profile';
+
+    this.pushLog('info', 'system', `Imported connection profile "${profileName}".`);
+
+    return {
+      canceled: false,
+      profileName,
+      path: profilePath,
+      settings: saveResult.settings,
+      state: saveResult.state,
+    };
+  }
+
+  async exportConnectionProfile(
+    profileName = 'CSN Media Bridge Connection Profile',
+  ): Promise<ConnectionProfileExportResult> {
+    const result = await dialog.showSaveDialog(this.getDialogWindow(), {
+      title: 'Export Connection Profile',
+      defaultPath: 'csn-media-bridge.connection-profile.json',
+      filters: [{ name: 'Connection Profile', extensions: ['json'] }],
+    });
+
+    if (result.canceled) {
+      return {
+        canceled: true,
+        profileName: null,
+        path: null,
+      };
+    }
+
+    if (!result.filePath) {
+      throw new Error('No destination was selected for the connection profile.');
+    }
+
+    const profile = buildConnectionProfile(this.settings, profileName);
+    await writeFile(result.filePath, `${JSON.stringify(profile, null, 2)}\n`, 'utf8');
+    this.pushLog('info', 'system', `Exported connection profile "${profile.profileName}".`);
+
+    return {
+      canceled: false,
+      profileName: profile.profileName,
+      path: result.filePath,
     };
   }
 
@@ -1791,6 +1889,7 @@ export class BridgeController {
       outputDirectory: null,
       masterPlaylistPath: null,
       manifestUrl: null,
+      dashManifestUrl: null,
       posterPath: null,
       posterUrl: null,
       publicUrl: null,
@@ -1949,6 +2048,7 @@ export class BridgeController {
         archiveObjectKey: expectedSyncTargets.archiveObjectKey,
         distributionObjectKey: expectedSyncTargets.distributionObjectKey,
         manifestUrl: expectedSyncTargets.manifestUrl,
+        dashManifestUrl: expectedSyncTargets.dashManifestUrl,
         publicUrl: expectedSyncTargets.playbackUrl,
         sources: expectedSyncTargets.sources,
       });
@@ -1969,7 +2069,7 @@ export class BridgeController {
             stage: 'encoding',
             message:
               deliveryType === 'hls'
-                ? `Encoding HLS ladder at ${encodingProgress.toFixed(0)}%.`
+                ? `Encoding CMAF HLS/DASH package at ${encodingProgress.toFixed(0)}%.`
                 : `Encoding progressive renditions at ${encodingProgress.toFixed(0)}%.`,
             encodingProgress,
             updatedAt: nowIso(),
@@ -1996,6 +2096,7 @@ export class BridgeController {
         posterUrl: transcodeResult.posterPath ? syncTargets.posterUrl : null,
         masterPlaylistPath: transcodeResult.masterPlaylistPath,
         manifestUrl: syncTargets.manifestUrl,
+        dashManifestUrl: syncTargets.dashManifestUrl,
         publicUrl: syncTargets.playbackUrl,
         sources: syncTargets.sources,
         updatedAt: nowIso(),
@@ -2019,7 +2120,7 @@ export class BridgeController {
               uploadProgress < 35
                 ? `Uploading source archive ${uploadProgress.toFixed(0)}%.`
                 : deliveryType === 'hls'
-                  ? `Uploading HLS ladder ${uploadProgress.toFixed(0)}%.`
+                  ? `Uploading CMAF HLS/DASH package ${uploadProgress.toFixed(0)}%.`
                   : `Uploading progressive renditions ${uploadProgress.toFixed(0)}%.`,
             uploadProgress,
             updatedAt: nowIso(),
@@ -2047,6 +2148,7 @@ export class BridgeController {
         archiveObjectKey: syncResult.archiveObjectKey,
         distributionObjectKey: syncResult.distributionObjectKey,
         manifestUrl: syncResult.manifestUrl,
+        dashManifestUrl: syncResult.dashManifestUrl,
         publicUrl: syncResult.playbackUrl,
         posterUrl: this.jobs.get(jobId)?.posterPath ? syncResult.posterUrl : null,
         sources: syncResult.sources,
@@ -2433,6 +2535,8 @@ export class BridgeController {
       posterPath: this.settings.extractPosterFrame ? 'poster.jpg' : null,
       masterPlaylistPath: deliveryType === 'hls' ? 'master.m3u8' : null,
       manifestRelativePath: deliveryType === 'hls' ? 'master.m3u8' : null,
+      dashManifestPath: deliveryType === 'hls' ? 'manifest.mpd' : null,
+      dashManifestRelativePath: deliveryType === 'hls' ? 'manifest.mpd' : null,
       playbackRelativePath: deliveryType === 'hls' ? 'master.m3u8' : 'playback-h264.mp4',
       sources:
         deliveryType === 'progressive'
@@ -2523,6 +2627,7 @@ export class BridgeController {
           distributionObjectKey: existingVideo.distributionObjectKey,
           playbackUrl: existingVideo.playbackUrl,
           manifestUrl: existingVideo.manifestUrl ?? existingVideo.masterPlaylistUrl ?? null,
+          dashManifestUrl: existingVideo.dashManifestUrl ?? null,
           posterUrl: existingVideo.posterUrl ?? null,
           sources: existingVideo.sources ?? [],
           encoder: existingVideo.encoder,
@@ -2581,6 +2686,7 @@ export class BridgeController {
       archiveObjectKey: existingVideo.archiveObjectKey,
       distributionObjectKey: existingVideo.distributionObjectKey,
       manifestUrl: existingVideo.manifestUrl ?? existingVideo.masterPlaylistUrl ?? null,
+      dashManifestUrl: existingVideo.dashManifestUrl ?? null,
       publicUrl: existingVideo.playbackUrl,
       posterUrl: existingVideo.posterUrl ?? null,
       sources: existingVideo.sources ?? [],
@@ -2630,6 +2736,7 @@ export class BridgeController {
       distributionObjectKey: job.distributionObjectKey,
       playbackUrl: job.publicUrl,
       manifestUrl: job.manifestUrl,
+      dashManifestUrl: job.dashManifestUrl,
       posterUrl: job.posterUrl,
       sources: job.sources,
       encoder:

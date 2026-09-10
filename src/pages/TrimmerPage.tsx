@@ -316,8 +316,8 @@ export default function TrimmerPage() {
       <div className="mb-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <h1 className="text-page text-ink">Trimmer</h1>
-            <p className="mt-1.5 text-body text-ink-muted">
+            <h1 className="font-display text-page text-paper">Trimmer</h1>
+            <p className="mt-1.5 text-copy text-muted">
               Load a local MP4 or MOV file, scrub to your exact in and out points, then export a
               trimmed MP4 for the next ingest step. The preview runs through the Electron main
               process so the renderer can treat local files like normal streamable media.
@@ -333,7 +333,7 @@ export default function TrimmerPage() {
             </StatusBadge>
             <button
               onClick={() => void handleChooseSource()}
-              className="spool-btn-primary"
+              className="csn-btn-primary"
               disabled={isPickingSource || isExporting}
               type="button"
             >
@@ -345,9 +345,9 @@ export default function TrimmerPage() {
         {(exportNotice || pageError) && (
           <div className="mt-4 space-y-2">
             {exportNotice && (
-              <p className="text-body text-secondary-300">{exportNotice}</p>
+              <p className="text-copy text-state-ok">{exportNotice}</p>
             )}
-            {pageError && <p className="text-body text-state-danger">{pageError}</p>}
+            {pageError && <p className="text-copy text-state-danger">{pageError}</p>}
           </div>
         )}
       </div>
@@ -369,13 +369,13 @@ export default function TrimmerPage() {
               <div className="space-y-5 p-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="text-overline uppercase text-ink-dim">
+                    <p className="font-condensed text-overline uppercase text-dim">
                       Active Source
                     </p>
-                    <h2 className="mt-2 text-section text-ink">
+                    <h2 className="mt-2 font-display text-section text-paper">
                       {source.sourceFileName}
                     </h2>
-                    <p className="mt-2 break-all text-sm text-ink-muted">
+                    <p className="mt-2 break-all text-sm text-muted">
                       {source.sourcePath}
                     </p>
                   </div>
@@ -383,57 +383,57 @@ export default function TrimmerPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full px-3 py-1 text-overline uppercase bg-surface-elevated text-ink-muted">
+                  <span className="rounded-full px-3 py-1 font-condensed text-overline uppercase bg-ink-chip text-muted">
                     {formatFileSize(source.fileSizeBytes)}
                   </span>
-                  <span className="rounded-full px-3 py-1 text-overline uppercase bg-surface-elevated text-ink-muted">
+                  <span className="rounded-full px-3 py-1 font-condensed text-overline uppercase bg-ink-chip text-muted">
                     Modified {formatDate(source.modifiedAt)}
                   </span>
-                  <span className="rounded-full px-3 py-1 text-overline uppercase bg-surface-elevated text-ink-muted">
+                  <span className="rounded-full px-3 py-1 font-condensed text-overline uppercase bg-ink-chip text-muted">
                     Source Duration {formatTime(durationSeconds)}
                   </span>
                 </div>
 
-                <div className="space-y-3 rounded-control border p-4 border-surface-hairline bg-surface-card">
-                  <div className="flex items-center justify-between text-overline uppercase text-ink-dim">
+                <div className="space-y-3 rounded-control border p-4 border-rule bg-ink-panel">
+                  <div className="flex items-center justify-between font-condensed text-overline uppercase text-dim">
                     <span>Trim Window</span>
                     <span>Playhead {formatTime(currentTimeSeconds)}</span>
                   </div>
-                  <div className="relative h-3 overflow-hidden rounded-full bg-surface-field">
+                  <div className="relative h-3 overflow-hidden rounded-full bg-ink-tile">
                     <div
-                      className="absolute inset-y-0 rounded-full bg-secondary-500/50"
+                      className="absolute inset-y-0 rounded-full bg-state-ok/50"
                       style={{
                         left: `${selectionLeftPercent}%`,
                         width: `${selectionWidthPercent}%`,
                       }}
                     />
                     <div
-                      className="absolute top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-surface-card shadow-[0_0_0_2px_rgba(15,23,42,0.4)]"
+                      className="absolute top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-ink-panel shadow-[0_0_0_2px_rgba(15,23,42,0.4)]"
                       style={{ left: `calc(${playheadPercent}% - 2px)` }}
                     />
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-control border p-3 border-surface-hairline bg-surface-elevated">
-                      <p className="text-overline uppercase text-ink-dim">
+                    <div className="rounded-control border p-3 border-rule bg-ink-chip">
+                      <p className="font-condensed text-overline uppercase text-dim">
                         In
                       </p>
-                      <p className="mt-2 text-section text-ink">
+                      <p className="mt-2 font-display text-section text-paper">
                         {formatTime(inPointSeconds)}
                       </p>
                     </div>
-                    <div className="rounded-control border p-3 border-surface-hairline bg-surface-elevated">
-                      <p className="text-overline uppercase text-ink-dim">
+                    <div className="rounded-control border p-3 border-rule bg-ink-chip">
+                      <p className="font-condensed text-overline uppercase text-dim">
                         Out
                       </p>
-                      <p className="mt-2 text-section text-ink">
+                      <p className="mt-2 font-display text-section text-paper">
                         {formatTime(outPointSeconds)}
                       </p>
                     </div>
-                    <div className="rounded-control border p-3 border-surface-hairline bg-surface-elevated">
-                      <p className="text-overline uppercase text-ink-dim">
+                    <div className="rounded-control border p-3 border-rule bg-ink-chip">
+                      <p className="font-condensed text-overline uppercase text-dim">
                         Selection
                       </p>
-                      <p className="mt-2 text-section text-ink">
+                      <p className="mt-2 font-display text-section text-paper">
                         {formatTime(selectionDurationSeconds)}
                       </p>
                     </div>
@@ -444,17 +444,17 @@ export default function TrimmerPage() {
           ) : (
             <div className="flex min-h-[32rem] flex-col items-center justify-center gap-4 p-10 text-center">
               <div className="max-w-md">
-                <h2 className="text-section text-ink">
+                <h2 className="font-display text-section text-paper">
                   Load a local clip to start trimming
                 </h2>
-                <p className="mt-3 text-sm leading-6 text-ink-muted">
+                <p className="mt-3 text-sm leading-6 text-muted">
                   Start with an MP4 when you can. Chromium-backed playback is happiest there, and
                   the trim export will always write a fresh MP4 for the next stage of the workflow.
                 </p>
               </div>
               <button
                 onClick={() => void handleChooseSource()}
-                className="rounded-control bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-400"
+                className="rounded-control bg-accent px-4 py-2 text-sm font-semibold text-paper transition hover:bg-accent-hi"
                 type="button"
               >
                 Open Local Clip
@@ -467,8 +467,8 @@ export default function TrimmerPage() {
           <GlassCard>
             <div className="space-y-4">
               <div>
-                <h2 className="text-section text-ink">Trim Controls</h2>
-                <p className="mt-1 text-sm text-ink-muted">
+                <h2 className="font-display text-section text-paper">Trim Controls</h2>
+                <p className="mt-1 text-sm text-muted">
                   Mark the range, fine-tune the numbers, then export a clean MP4.
                 </p>
               </div>
@@ -476,7 +476,7 @@ export default function TrimmerPage() {
               <div className="grid gap-3">
                 <button
                   onClick={handleMarkIn}
-                  className="rounded-control border border-secondary-500/30 bg-secondary-500/[.13] px-4 py-3 text-left text-sm font-semibold transition hover:bg-secondary-500/[.16] disabled:cursor-not-allowed disabled:opacity-60 text-secondary-300"
+                  className="rounded-control border border-state-ok/30 bg-state-ok/[.13] px-4 py-3 text-left text-sm font-semibold transition hover:bg-state-ok/[.16] disabled:cursor-not-allowed disabled:opacity-60 text-state-ok"
                   disabled={!source}
                   type="button"
                 >
@@ -484,7 +484,7 @@ export default function TrimmerPage() {
                 </button>
                 <button
                   onClick={handleMarkOut}
-                  className="rounded-control border border-primary-500/40 bg-primary-500/[.13] px-4 py-3 text-left text-sm font-semibold transition hover:bg-primary-400/15 disabled:cursor-not-allowed disabled:opacity-60 text-primary-200"
+                  className="rounded-control border border-accent/40 bg-accent/[.13] px-4 py-3 text-left text-sm font-semibold transition hover:bg-accent-hi/15 disabled:cursor-not-allowed disabled:opacity-60 text-accent-hi"
                   disabled={!source}
                   type="button"
                 >
@@ -493,10 +493,10 @@ export default function TrimmerPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-                <label className="space-y-1.5 text-control font-medium text-ink-strong">
+                <label className="space-y-1.5 text-control font-medium text-body">
                   <span>In Point (seconds)</span>
                   <input
-                    className="spool-input"
+                    className="csn-input"
                     disabled={!source}
                     max={durationSeconds || undefined}
                     min={0}
@@ -507,10 +507,10 @@ export default function TrimmerPage() {
                   />
                 </label>
 
-                <label className="space-y-1.5 text-control font-medium text-ink-strong">
+                <label className="space-y-1.5 text-control font-medium text-body">
                   <span>Out Point (seconds)</span>
                   <input
-                    className="spool-input"
+                    className="csn-input"
                     disabled={!source}
                     max={durationSeconds || undefined}
                     min={0}
@@ -525,7 +525,7 @@ export default function TrimmerPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   onClick={() => jumpToTime(inPointSeconds)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-surface-hairline text-ink-strong hover:border-secondary-400/30 hover:bg-secondary-400/5"
+                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-state-ok/30 hover:bg-state-ok/5"
                   disabled={!source}
                   type="button"
                 >
@@ -533,7 +533,7 @@ export default function TrimmerPage() {
                 </button>
                 <button
                   onClick={() => jumpToTime(outPointSeconds)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-surface-hairline text-ink-strong hover:border-primary-400/30 hover:bg-primary-500/[.08]"
+                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-accent-hi/30 hover:bg-accent/[.08]"
                   disabled={!source}
                   type="button"
                 >
@@ -541,7 +541,7 @@ export default function TrimmerPage() {
                 </button>
                 <button
                   onClick={() => jumpToTime(currentTimeSeconds - 1)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-surface-hairline text-ink-strong hover:border-white/[.22] hover:bg-surface-elevated"
+                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-white/[.22] hover:bg-ink-chip"
                   disabled={!source}
                   type="button"
                 >
@@ -549,7 +549,7 @@ export default function TrimmerPage() {
                 </button>
                 <button
                   onClick={() => jumpToTime(currentTimeSeconds + 1)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-surface-hairline text-ink-strong hover:border-white/[.22] hover:bg-surface-elevated"
+                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-white/[.22] hover:bg-ink-chip"
                   disabled={!source}
                   type="button"
                 >
@@ -563,7 +563,7 @@ export default function TrimmerPage() {
                   setOutPointSeconds(durationSeconds);
                   jumpToTime(0);
                 }}
-                className="rounded-control border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 border-surface-hairline text-ink-strong hover:border-white/[.22] hover:bg-surface-elevated"
+                className="rounded-control border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 border-rule text-body hover:border-white/[.22] hover:bg-ink-chip"
                 disabled={!source}
                 type="button"
               >
@@ -572,7 +572,7 @@ export default function TrimmerPage() {
 
               <button
                 onClick={() => void handleExport()}
-                className="rounded-control bg-primary-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-control bg-accent px-4 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={!hasValidSelection || isExporting || !state.system.ffmpegAvailable}
                 type="button"
               >
@@ -584,22 +584,22 @@ export default function TrimmerPage() {
           <GlassCard>
             <div className="space-y-4">
               <div>
-                <h2 className="text-section text-ink">Operator Notes</h2>
-                <p className="mt-1 text-sm text-ink-muted">
+                <h2 className="font-display text-section text-paper">Operator Notes</h2>
+                <p className="mt-1 text-sm text-muted">
                   Keyboard shortcuts stay active as long as you are not focused in an input field.
                 </p>
               </div>
 
-              <div className="space-y-2 text-sm text-ink-strong">
-                <p><span className="font-semibold text-ink">Space</span> toggles playback.</p>
-                <p><span className="font-semibold text-ink">I</span> sets the in point.</p>
-                <p><span className="font-semibold text-ink">O</span> sets the out point.</p>
-                <p><span className="font-semibold text-ink">Left/Right</span> nudges by one second.</p>
-                <p><span className="font-semibold text-ink">Shift + Left/Right</span> nudges by one frame at 30 fps.</p>
+              <div className="space-y-2 text-sm text-body">
+                <p><span className="font-semibold text-paper">Space</span> toggles playback.</p>
+                <p><span className="font-semibold text-paper">I</span> sets the in point.</p>
+                <p><span className="font-semibold text-paper">O</span> sets the out point.</p>
+                <p><span className="font-semibold text-paper">Left/Right</span> nudges by one second.</p>
+                <p><span className="font-semibold text-paper">Shift + Left/Right</span> nudges by one frame at 30 fps.</p>
               </div>
 
               {lastExport && !lastExport.canceled && lastExport.outputPath && (
-                <div className="rounded-control border border-secondary-500/30 bg-secondary-500/[.13] p-4 text-sm text-secondary-200">
+                <div className="rounded-control border border-state-ok/30 bg-state-ok/[.13] p-4 text-sm text-state-ok">
                   <p className="font-semibold">Last Export</p>
                   <p className="mt-2 break-all">{lastExport.outputPath}</p>
                 </div>

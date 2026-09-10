@@ -4,7 +4,7 @@ import type { AppSettings } from '../shared/types';
 
 function Label({ children }: { children: string }) {
   return (
-    <span className="spool-label">{children}</span>
+    <span className="csn-label">{children}</span>
   );
 }
 
@@ -21,17 +21,17 @@ function ToggleRow({
 }) {
   return (
     <label
-      className="flex items-start gap-3 rounded-control border p-4 border-surface-hairline bg-surface-canvas"
+      className="flex items-start gap-3 rounded-control border p-4 border-rule bg-ink"
     >
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-4 w-4 rounded text-primary-200 focus:ring-primary-400 border-surface-hairline bg-transparent"
+        className="mt-1 h-4 w-4 rounded text-accent-hi focus:ring-accent-hi border-rule bg-transparent"
       />
       <span>
-        <span className="block font-medium text-ink">{title}</span>
-        <span className="mt-1 block text-sm text-ink-muted">
+        <span className="block font-medium text-paper">{title}</span>
+        <span className="mt-1 block text-sm text-muted">
           {description}
         </span>
       </span>
@@ -39,14 +39,22 @@ function ToggleRow({
   );
 }
 
-const INPUT_CLASS = 'spool-input h-11';
+const INPUT_CLASS = 'csn-input h-11';
 
-const SELECT_CLASS = 'spool-select h-11 w-full text-body text-ink';
+const SELECT_CLASS = 'csn-select h-11 w-full text-copy text-paper';
 
-const BROWSE_CLASS = 'spool-btn-secondary h-11 px-4';
+const BROWSE_CLASS = 'csn-btn-secondary h-11 px-4';
 
 export default function SettingsPage() {
-  const { settings, state, saveSettings, browseDirectory, isSavingSettings } = useBridge();
+  const {
+    settings,
+    state,
+    saveSettings,
+    importConnectionProfile,
+    exportConnectionProfile,
+    browseDirectory,
+    isSavingSettings,
+  } = useBridge();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -80,15 +88,100 @@ export default function SettingsPage() {
     setNotice('Settings saved and watcher state refreshed.');
   }
 
+  async function handleImportConnectionProfile() {
+    const result = await importConnectionProfile();
+    if (result.canceled) {
+      setNotice('Connection profile import canceled.');
+      return;
+    }
+
+    setDraft(result.settings);
+    setNotice(`Imported ${result.profileName ?? 'connection profile'}. Add machine secrets to finish setup.`);
+  }
+
+  async function handleExportConnectionProfile() {
+    const result = await exportConnectionProfile('CSN Media Bridge Connection Profile');
+    if (result.canceled) {
+      setNotice('Connection profile export canceled.');
+      return;
+    }
+
+    setNotice(`Exported ${result.profileName ?? 'connection profile'} without embedded secrets.`);
+  }
+
+  const hasConnectionDefaults = Boolean(
+    draft.convex.deploymentUrl ||
+      draft.b2.bucket ||
+      draft.r2.bucket ||
+      draft.r2.publicBaseUrl,
+  );
+
   return (
     <div className="px-6 pb-11 pt-[22px]">
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-7">
         <div>
-          <h1 className="text-page text-ink">Settings</h1>
-          <p className="mt-1.5 max-w-2xl text-body text-ink-muted">
+          <h1 className="font-display text-page text-paper">Settings</h1>
+          <p className="mt-1.5 max-w-2xl text-copy text-muted">
             Configure the ingest paths, manual offload destinations, cloud targets, and Convex
             mutation the desktop app uses after every successful encode or offload.
           </p>
+        </div>
+
+        <div className="rounded-control border p-5 border-rule bg-ink">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="font-display text-section text-paper">Team Connection Profile</h2>
+              <p className="mt-1.5 max-w-3xl text-copy text-muted">
+                Load shared backend coordinates in one step. Profiles include public buckets,
+                endpoints, path prefixes, update feeds, and Convex function paths; machine tokens
+                and storage access keys stay private to this workstation.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleImportConnectionProfile()}
+                disabled={isSavingSettings}
+                className="csn-btn-secondary h-11 px-4"
+              >
+                Import Profile
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExportConnectionProfile()}
+                className="csn-btn-secondary h-11 px-4"
+              >
+                Export Profile
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-control border p-3 border-rule bg-ink-panel">
+              <p className="font-condensed text-overline uppercase text-muted">Backend</p>
+              <p className="mt-1 truncate text-sm text-paper">
+                {draft.convex.deploymentUrl || 'No Convex URL loaded'}
+              </p>
+            </div>
+            <div className="rounded-control border p-3 border-rule bg-ink-panel">
+              <p className="font-condensed text-overline uppercase text-muted">Archive</p>
+              <p className="mt-1 truncate text-sm text-paper">
+                {draft.b2.bucket || 'No B2 bucket loaded'}
+              </p>
+            </div>
+            <div className="rounded-control border p-3 border-rule bg-ink-panel">
+              <p className="font-condensed text-overline uppercase text-muted">Playback</p>
+              <p className="mt-1 truncate text-sm text-paper">
+                {draft.r2.bucket || draft.r2.publicBaseUrl || 'No R2 target loaded'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-control border p-4 text-sm border-accent/40 bg-accent/[.13] text-accent-hi">
+            {hasConnectionDefaults
+              ? 'Connection defaults are loaded. Add this workstation’s node token and scoped storage keys below.'
+              : 'No team profile is loaded yet. Import one, or ship a build with CSN_* public defaults baked in.'}
+          </div>
         </div>
 
         <div className="grid gap-8 xl:grid-cols-2">
@@ -170,7 +263,7 @@ export default function SettingsPage() {
                 <option value="fast">Fast Local Copy (recommended)</option>
                 <option value="safe">Safe Checksum Copy</option>
               </select>
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className="mt-2 text-sm text-muted">
                 {draft.offload.localCopyMode === 'fast'
                   ? 'Uses clone-friendly local copies plus size and modified-time checks for much faster first-pass offloads. Resume, manifest, and log behavior still stay in place.'
                   : 'Reads and verifies full-file checksums for each local original copy. This is slower, but it is the strictest local verification mode.'}
@@ -276,7 +369,7 @@ export default function SettingsPage() {
                 <option value="canonical">Canonical (lifecycle-aware)</option>
                 <option value="legacy">Legacy (flat path prefixes)</option>
               </select>
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className="mt-2 text-sm text-muted">
                 {draft.storage.layout === 'canonical'
                   ? 'New ingests write masters/{project}/{date}/{assetKey}/ in B2 and streaming/vod/{assetKey}/ plus posters/{assetKey}/ in R2, so R2 lifecycle rules can expire social renders without touching published playback assets. Objects already uploaded stay exactly where they are.'
                   : 'New ingests write the flat {path prefix}/{job folder}/ scheme used before the storage contract. R2 lifecycle rules cannot separate temporary social renders from permanent playback assets under this layout.'}
@@ -319,7 +412,7 @@ export default function SettingsPage() {
                 placeholder="https://s3.us-west-004.backblazeb2.com"
                 className={INPUT_CLASS}
               />
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className="mt-2 text-sm text-muted">
                 Needed only to preview and retrieve archived masters from the library. Copy it
                 from your bucket&apos;s details page in Backblaze — the region is read from the
                 address. Uploads and downloads do not use this.
@@ -335,7 +428,7 @@ export default function SettingsPage() {
                 className={INPUT_CLASS}
               />
               {draft.storage.layout === 'canonical' ? (
-                <p className="mt-2 text-sm text-ink-muted">
+                <p className="mt-2 text-sm text-muted">
                   Unused by the canonical layout. Kept so existing objects stay reachable if you
                   switch back to legacy.
                 </p>
@@ -418,7 +511,7 @@ export default function SettingsPage() {
                 className={INPUT_CLASS}
               />
               {draft.storage.layout === 'canonical' ? (
-                <p className="mt-2 text-sm text-ink-muted">
+                <p className="mt-2 text-sm text-muted">
                   Unused by the canonical layout. Kept so existing objects stay reachable if you
                   switch back to legacy.
                 </p>
@@ -446,7 +539,7 @@ export default function SettingsPage() {
                 }
                 className={INPUT_CLASS}
               />
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className="mt-2 text-sm text-muted">
                 Media functions live under <code>media/</code> on the shared deployment, so this
                 normally reads <code>media/videos:createVodEntry</code>.
               </p>
@@ -461,7 +554,7 @@ export default function SettingsPage() {
                 }
                 className={INPUT_CLASS}
               />
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className="mt-2 text-sm text-muted">
                 Identifies this workstation to the shared deployment. The ingest worker runs when
                 nobody is signed in, so it authenticates as a machine rather than borrowing an
                 operator&apos;s session. Ask an administrator to issue one; without it the app can
@@ -469,15 +562,15 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            <div className="rounded-control border p-4 border-surface-hairline bg-surface-canvas">
+            <div className="rounded-control border p-4 border-rule bg-ink">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-ink">App Updates</h3>
-                  <p className="mt-1 text-sm text-ink-muted">
+                  <h3 className="text-sm font-semibold text-paper">App Updates</h3>
+                  <p className="mt-1 text-sm text-muted">
                     Existing installs can check this feed for new desktop builds. Windows can install in-app, while macOS opens the latest download and may need a security approval after replacement.
                   </p>
                 </div>
-                <span className="rounded-full border px-3 py-1 text-overline uppercase border-surface-hairline text-ink-muted">
+                <span className="rounded-full border px-3 py-1 font-condensed text-overline uppercase border-rule text-muted">
                   v{state.appUpdate.currentVersion}
                 </span>
               </div>
@@ -529,13 +622,13 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <div className="rounded-control border border-primary-500/40 p-4 text-sm bg-primary-500/[.13] text-primary-200">
+                <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
                   The updater uses platform-specific folders under this URL. For example, macOS arm64 expects
                   `RELEASES.json` under `.../darwin/arm64`, and Windows Squirrel expects `RELEASES`
                   under `.../win32/x64`.
                 </div>
 
-                <div className="rounded-control border p-4 text-sm border-surface-hairline bg-surface-card text-ink-strong">
+                <div className="rounded-control border p-4 text-sm border-rule bg-ink-panel text-body">
                   {state.appUpdate.message}
                 </div>
               </div>
@@ -556,7 +649,7 @@ export default function SettingsPage() {
               />
               <ToggleRow
                 title="Generate poster frame"
-                description="Extracts a poster image near the 10-second mark and publishes it with the HLS output."
+                description="Extracts a poster image near the 10-second mark and publishes it with the playback output."
                 checked={draft.extractPosterFrame}
                 onChange={(checked) => setDraft({ ...draft, extractPosterFrame: checked })}
               />
@@ -568,7 +661,7 @@ export default function SettingsPage() {
               />
               <ToggleRow
                 title="Clean up temp output after success"
-                description="Deletes local HLS segments and poster files once the cloud upload and registration finish."
+                description="Deletes local playback segments and poster files once the cloud upload and registration finish."
                 checked={draft.autoCleanupTempFiles}
                 onChange={(checked) => setDraft({ ...draft, autoCleanupTempFiles: checked })}
               />
@@ -580,26 +673,26 @@ export default function SettingsPage() {
               />
             </div>
 
-            <div className="rounded-control border border-primary-500/40 p-4 text-sm bg-primary-500/[.13] text-primary-200">
+            <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
               Auto delivery uses sidecar metadata first. When a source is set to `auto`, videos at
-              or below the threshold become progressive clips and longer videos become HLS VOD.
+              or below the threshold become progressive clips and longer videos become CMAF HLS/DASH VOD.
             </div>
 
-            <div className="rounded-control border border-primary-500/40 p-4 text-sm bg-primary-500/[.13] text-primary-200">
+            <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
               Secrets are stored through Electron Store with Electron safe storage encryption when
               the operating system supports it.
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-surface-hairline">
-          <div className="text-sm text-ink-muted">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-rule">
+          <div className="text-sm text-muted">
             {notice ?? 'Save to persist and apply changes.'}
           </div>
           <button
             type="submit"
             disabled={isSavingSettings}
-            className="spool-btn-primary h-11 px-5"
+            className="csn-btn-primary h-11 px-5"
           >
             {isSavingSettings ? 'Saving...' : 'Save Configuration'}
           </button>

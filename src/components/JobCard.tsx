@@ -84,12 +84,12 @@ function AuditSection({ section }: { section: UploadAuditSectionSnapshot }) {
 
   return (
     <div
-      className="rounded-control border p-4 border-surface-hairline bg-surface-canvas"
+      className="rounded-control border p-4 border-rule bg-ink"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-ink">{section.label}</p>
-          <p className="mt-1 text-overline uppercase text-ink-dim">
+          <p className="text-sm font-semibold text-paper">{section.label}</p>
+          <p className="mt-1 font-condensed text-overline uppercase text-dim">
             {section.storage.toUpperCase()} / {section.bucket}
           </p>
         </div>
@@ -104,37 +104,37 @@ function AuditSection({ section }: { section: UploadAuditSectionSnapshot }) {
 
       <div className="mt-3 grid gap-3 text-xs lg:grid-cols-2">
         <div>
-          <p className="uppercase tracking-[.09em] text-ink-dim">Local Source</p>
-          <p className="mt-1 text-ink-strong">
+          <p className="uppercase tracking-[.09em] text-dim">Local Source</p>
+          <p className="mt-1 text-body">
             {section.localPath ?? 'No local path recorded'}
           </p>
-          <p className="mt-1 text-ink-muted">
+          <p className="mt-1 text-muted">
             {section.localExists ? 'Local files available for comparison.' : 'Local comparison files are unavailable.'}
           </p>
         </div>
         <div>
-          <p className="uppercase tracking-[.09em] text-ink-dim">Remote Prefix</p>
-          <p className="mt-1 text-ink-strong">{section.remotePrefix}</p>
-          <p className="mt-1 text-ink-muted">
+          <p className="uppercase tracking-[.09em] text-dim">Remote Prefix</p>
+          <p className="mt-1 text-body">{section.remotePrefix}</p>
+          <p className="mt-1 text-muted">
             Expected {section.expectedObjects.length} object{section.expectedObjects.length === 1 ? '' : 's'} /
             Found {section.remoteObjects.length}
           </p>
         </div>
         <div className="lg:col-span-2">
-          <p className="uppercase tracking-[.09em] text-ink-dim">Missing</p>
-          <p className="mt-1 text-ink-strong">
+          <p className="uppercase tracking-[.09em] text-dim">Missing</p>
+          <p className="mt-1 text-body">
             {formatObjectKeyPreview(section.missingObjectKeys)}
           </p>
         </div>
         <div className="lg:col-span-2">
-          <p className="uppercase tracking-[.09em] text-ink-dim">Unexpected Remote Objects</p>
-          <p className="mt-1 text-ink-strong">
+          <p className="uppercase tracking-[.09em] text-dim">Unexpected Remote Objects</p>
+          <p className="mt-1 text-body">
             {formatObjectKeyPreview(section.unexpectedObjectKeys)}
           </p>
         </div>
         <div className="lg:col-span-2">
-          <p className="uppercase tracking-[.09em] text-ink-dim">Size Mismatches</p>
-          <p className="mt-1 text-ink-strong">
+          <p className="uppercase tracking-[.09em] text-dim">Size Mismatches</p>
+          <p className="mt-1 text-body">
             {formatObjectKeyPreview(section.sizeMismatchObjectKeys)}
           </p>
         </div>
@@ -191,12 +191,12 @@ export default function JobCard({ job }: { job: IngestJobSnapshot }) {
 
   return (
     <div
-      className="rounded-control border p-5 transition-colors border-surface-hairline bg-surface-canvas"
+      className="rounded-control border p-5 transition-colors border-rule bg-ink"
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h4 className="truncate text-section text-ink">
+            <h4 className="truncate font-display text-section text-paper">
               {displayTitle}
             </h4>
             {job.encoder && <StatusBadge tone="neutral">{job.encoder}</StatusBadge>}
@@ -206,26 +206,26 @@ export default function JobCard({ job }: { job: IngestJobSnapshot }) {
             {auditStatus && <StatusBadge tone={auditStatus.tone}>{auditStatus.label}</StatusBadge>}
           </div>
           {job.title && job.title !== job.sourceName && (
-            <p className="mt-1 truncate text-overline uppercase text-ink-dim">
+            <p className="mt-1 truncate font-condensed text-overline uppercase text-dim">
               Source file: {job.sourceName}
             </p>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-dim">
             <span>{formatBytes(job.sourceSizeBytes)}</span>
-            <span className="text-ink-muted">/</span>
+            <span className="text-muted">/</span>
             <span>{resolution}</span>
-            <span className="text-ink-muted">/</span>
+            <span className="text-muted">/</span>
             <span>{formatFrameRate(job.sourceFrameRate)}</span>
-            <span className="text-ink-muted">/</span>
+            <span className="text-muted">/</span>
             <span>{job.stage.replace(/-/g, ' ')}</span>
-            <span className="text-ink-muted">/</span>
+            <span className="text-muted">/</span>
             <span>{job.durationSeconds ? `${Math.round(job.durationSeconds)}s` : 'Duration pending'}</span>
           </div>
         </div>
         <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
       </div>
 
-      <p className="mb-4 text-sm text-ink-strong">{job.message}</p>
+      <p className="mb-4 text-sm text-body">{job.message}</p>
 
       <div className="space-y-3">
         <ProgressBar label="Encoding" value={job.encodingProgress} variant="primary" />
@@ -234,51 +234,57 @@ export default function JobCard({ job }: { job: IngestJobSnapshot }) {
 
       <div className="mt-4 grid gap-3 text-xs lg:grid-cols-2">
         <div>
-          <p className="uppercase tracking-[.09em] text-ink-dim">Started</p>
-          <p className="mt-1 text-ink-strong">{formatTimestamp(job.startedAt)}</p>
+          <p className="uppercase tracking-[.09em] text-dim">Started</p>
+          <p className="mt-1 text-body">{formatTimestamp(job.startedAt)}</p>
         </div>
         <div>
-          <p className="uppercase tracking-[.09em] text-ink-dim">Completed</p>
-          <p className="mt-1 text-ink-strong">{formatTimestamp(job.completedAt)}</p>
+          <p className="uppercase tracking-[.09em] text-dim">Completed</p>
+          <p className="mt-1 text-body">{formatTimestamp(job.completedAt)}</p>
         </div>
         <div className="lg:col-span-2">
-          <p className="uppercase tracking-[.09em] text-ink-dim">
+          <p className="uppercase tracking-[.09em] text-dim">
             {job.deliveryType === 'progressive' ? 'Playback URL' : 'Playback Manifest'}
           </p>
-          <p className="mt-1 truncate text-primary-200">
+          <p className="mt-1 truncate text-accent-hi">
             {job.publicUrl ?? 'Pending distribution URL'}
           </p>
         </div>
         {job.manifestUrl && job.manifestUrl !== job.publicUrl && (
           <div className="lg:col-span-2">
-            <p className="uppercase tracking-[.09em] text-ink-dim">Manifest</p>
-            <p className="mt-1 truncate text-primary-200">{job.manifestUrl}</p>
+            <p className="uppercase tracking-[.09em] text-dim">HLS Manifest</p>
+            <p className="mt-1 truncate text-accent-hi">{job.manifestUrl}</p>
+          </div>
+        )}
+        {job.dashManifestUrl && (
+          <div className="lg:col-span-2">
+            <p className="uppercase tracking-[.09em] text-dim">DASH Manifest</p>
+            <p className="mt-1 truncate text-accent-hi">{job.dashManifestUrl}</p>
           </div>
         )}
         <div className="lg:col-span-2">
-          <p className="uppercase tracking-[.09em] text-ink-dim">Poster</p>
-          <p className="mt-1 truncate text-ink-strong">
+          <p className="uppercase tracking-[.09em] text-dim">Poster</p>
+          <p className="mt-1 truncate text-body">
             {job.posterUrl ?? job.posterPath ?? 'Poster pending'}
           </p>
         </div>
         {job.sources.length > 0 && (
           <div className="lg:col-span-2">
-            <p className="uppercase tracking-[.09em] text-ink-dim">Sources</p>
-            <p className="mt-1 text-ink-strong">
+            <p className="uppercase tracking-[.09em] text-dim">Sources</p>
+            <p className="mt-1 text-body">
               {job.sources.map((source) => `${source.codec}: ${source.url}`).join(' | ')}
             </p>
           </div>
         )}
         <div className="lg:col-span-2">
-          <p className="uppercase tracking-[.09em] text-ink-dim">Metadata</p>
-          <p className="mt-1 text-ink-strong">
+          <p className="uppercase tracking-[.09em] text-dim">Metadata</p>
+          <p className="mt-1 text-body">
             {job.tags.length > 0 ? `Tags: ${job.tags.join(', ')}` : 'No tags'}
             {job.playlistTitles.length > 0 ? ` | Playlists: ${job.playlistTitles.join(', ')}` : ''}
             {job.series ? ` | Series: ${job.series}` : ''}
             {job.recordedAt ? ` | Recorded: ${new Date(job.recordedAt).toLocaleString()}` : ''}
           </p>
           {(job.description || job.sidecarPath) && (
-            <p className="mt-2 text-ink-muted">
+            <p className="mt-2 text-muted">
               {job.description ?? 'Metadata loaded from sidecar file.'}
               {job.sidecarPath ? ` Source metadata: ${job.sidecarPath}` : ''}
             </p>
@@ -287,11 +293,11 @@ export default function JobCard({ job }: { job: IngestJobSnapshot }) {
       </div>
 
       {canAuditUploads && (
-        <div className="mt-4 space-y-3 pt-4 border-surface-hairline">
+        <div className="mt-4 space-y-3 pt-4 border-rule">
           <div className="flex flex-wrap justify-end gap-2">
             <button
               onClick={() => void handleAuditUploads()}
-              className="rounded-control border border-secondary-500/30 bg-secondary-500/[.13] px-4 py-2 text-overline uppercase transition hover:bg-secondary-500/20 disabled:cursor-not-allowed disabled:opacity-60 text-secondary-300"
+              className="rounded-control border border-state-ok/30 bg-state-ok/[.13] px-4 py-2 font-condensed text-overline uppercase transition hover:bg-state-ok/20 disabled:cursor-not-allowed disabled:opacity-60 text-state-ok"
               disabled={isAuditing}
             >
               {isAuditing ? 'Auditing...' : 'Audit Upload'}
@@ -300,20 +306,20 @@ export default function JobCard({ job }: { job: IngestJobSnapshot }) {
               <>
                 <button
                   onClick={() => void handleResumeSamePrefix()}
-                  className="rounded-control border border-primary-500/40 bg-primary-500/[.13] px-4 py-2 text-overline uppercase transition hover:bg-primary-500/20 disabled:cursor-not-allowed disabled:opacity-60 text-primary-200"
+                  className="rounded-control border border-accent/40 bg-accent/[.13] px-4 py-2 font-condensed text-overline uppercase transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60 text-accent-hi"
                   disabled={isResumingSamePrefix}
                 >
                   {isResumingSamePrefix ? 'Queueing...' : 'Resume Same Prefix'}
                 </button>
                 <button
                   onClick={() => void retryJob(job.id)}
-                  className="rounded-control border border-state-danger/30 bg-state-danger/[.12] px-4 py-2 text-overline uppercase transition hover:bg-red-400/20 text-state-danger"
+                  className="rounded-control border border-state-danger/30 bg-state-danger/[.12] px-4 py-2 font-condensed text-overline uppercase transition hover:bg-state-danger/20 text-state-danger"
                 >
                   Retry Fresh Job
                 </button>
                 <button
                   onClick={() => void handleCleanupRemote()}
-                  className="rounded-control border px-4 py-2 text-overline uppercase transition disabled:cursor-not-allowed disabled:opacity-60 border-surface-hairline bg-surface-card text-ink-strong hover:bg-surface-elevated"
+                  className="rounded-control border px-4 py-2 font-condensed text-overline uppercase transition disabled:cursor-not-allowed disabled:opacity-60 border-rule bg-ink-panel text-body hover:bg-ink-chip"
                   disabled={isCleaningRemote}
                 >
                   {isCleaningRemote ? 'Cleaning...' : 'Clean Up Remote'}
@@ -325,12 +331,12 @@ export default function JobCard({ job }: { job: IngestJobSnapshot }) {
           {audit && (
             <div className="space-y-3">
               <div
-                className="rounded-control border p-4 text-sm border-surface-hairline bg-surface-card"
+                className="rounded-control border p-4 text-sm border-rule bg-ink-panel"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-ink">{audit.message}</p>
-                    <p className="mt-1 text-overline uppercase text-ink-dim">
+                    <p className="font-semibold text-paper">{audit.message}</p>
+                    <p className="mt-1 font-condensed text-overline uppercase text-dim">
                       Audited {new Date(audit.auditedAt).toLocaleString()}
                     </p>
                   </div>

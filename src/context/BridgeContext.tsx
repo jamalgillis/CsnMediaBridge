@@ -13,6 +13,8 @@ import type {
   IngestUploadAuditSnapshot,
   ManualIntakeRequest,
   ManualIntakeSourceSnapshot,
+  ConnectionProfileExportResult,
+  ConnectionProfileImportResult,
 } from '../shared/types';
 
 interface BridgeContextValue {
@@ -23,6 +25,8 @@ interface BridgeContextValue {
   actionError: string | null;
   clearActionError: () => void;
   saveSettings: (settings: AppSettings) => Promise<void>;
+  importConnectionProfile: () => Promise<ConnectionProfileImportResult>;
+  exportConnectionProfile: (profileName?: string) => Promise<ConnectionProfileExportResult>;
   checkForAppUpdates: () => Promise<void>;
   installAppUpdate: () => Promise<void>;
   startWatching: () => Promise<void>;
@@ -110,6 +114,31 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         throw error;
       } finally {
         setIsSavingSettings(false);
+      }
+    },
+    importConnectionProfile: async () => {
+      setIsSavingSettings(true);
+      try {
+        const result = await window.mediaBridge.importConnectionProfile();
+        setSettings(result.settings);
+        setState(result.state);
+        setActionError(null);
+        return result;
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+        throw error;
+      } finally {
+        setIsSavingSettings(false);
+      }
+    },
+    exportConnectionProfile: async (profileName) => {
+      try {
+        const result = await window.mediaBridge.exportConnectionProfile(profileName);
+        setActionError(null);
+        return result;
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+        throw error;
       }
     },
     checkForAppUpdates: async () => {

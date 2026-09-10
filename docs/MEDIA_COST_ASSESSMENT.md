@@ -35,7 +35,10 @@ Default storage prefixes:
 | Backblaze B2 | `vod/archive` | Original source MP4 archive |
 | Cloudflare R2 | `vod/hls` | Playback-ready distribution assets |
 
-For videos longer than 60 seconds, `auto` delivery resolves to HLS. The HLS package currently creates four renditions:
+For videos longer than 60 seconds, `auto` delivery resolves to long-form VOD.
+The VOD package is CMAF-compatible: HLS and DASH manifests point at the same
+fragmented MP4 chunks, so adding DASH does not duplicate segment storage. The
+package currently creates four renditions:
 
 | Rendition | Video bitrate |
 | --- | ---: |
@@ -55,6 +58,10 @@ Planning estimate with packaging overhead: 5.75 GB per VOD hour in R2
 ```
 
 Short clips at or below 60 seconds may use progressive delivery instead. Progressive output is less deterministic because the H.264 encode can use hardware-specific quality settings and the optional AV1 encode depends on encoder availability.
+
+The DASH `.mpd` manifest adds only a small text file per VOD asset. It is ignored
+in the storage model because the size is negligible beside the shared `.m4s`
+media fragments.
 
 ### Uploaded Images
 

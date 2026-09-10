@@ -51,13 +51,14 @@ This folder should contain files that are intended for this pipeline.
 
 ## Step 3. Choose the Temporary Output Folder
 
-Click `Browse` beside `Temp Output Folder` and choose a folder where the app can create temporary HLS output during processing.
+Click `Browse` beside `Temp Output Folder` and choose a folder where the app can create temporary playback output during processing.
 
 This is where the app builds:
 
 - variant playlists
 - `master.m3u8`
-- `.ts` segments
+- `manifest.mpd`
+- `.m4s` segments
 
 This folder should have enough disk space for temporary encode output.
 
@@ -94,7 +95,7 @@ Fill in the distribution storage section with:
 - R2 public base URL
 - R2 path prefix
 
-This is where the app stores the playback-ready HLS files.
+This is where the app stores the playback-ready CMAF HLS/DASH files.
 
 ## Step 7. Enter Convex Settings
 
@@ -144,9 +145,9 @@ Drop the file into the watch folder and confirm the app:
 
 1. detects the file
 2. waits for the file to stabilize
-3. starts the HLS transcode
+3. starts the VOD transcode
 4. uploads the original MP4 to B2
-5. uploads the HLS output to R2
+5. uploads the playback output to R2
 6. registers the final URL with Convex
 7. marks the job complete
 

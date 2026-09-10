@@ -44,6 +44,7 @@ interface ConvexPayload {
   distributionObjectKey: string;
   playbackUrl: string;
   manifestUrl?: string | null;
+  dashManifestUrl?: string | null;
   posterUrl?: string | null;
   sources?: StoredVideoSource[];
   encoder: EffectiveHardwareEncoder;
@@ -257,6 +258,14 @@ export class ConvexService {
               'master.m3u8',
             )
           : null;
+      const nextDashManifestUrl =
+        deliveryType === 'hls' && video.dashManifestUrl
+          ? joinPublicUrl(
+              settings.r2.publicBaseUrl,
+              video.distributionObjectKey,
+              'manifest.mpd',
+            )
+          : video.dashManifestUrl ?? null;
       const nextPlaybackUrl =
         deliveryType === 'hls'
           ? (nextManifestUrl ?? video.playbackUrl)
@@ -278,6 +287,7 @@ export class ConvexService {
 
       const isAlreadyCurrent =
         (getManifestUrl(video) ?? null) === nextManifestUrl &&
+        (video.dashManifestUrl ?? null) === nextDashManifestUrl &&
         video.playbackUrl === nextPlaybackUrl &&
         (video.posterUrl ?? null) === nextPosterUrl &&
         JSON.stringify(video.sources ?? []) === JSON.stringify(nextSources);
@@ -300,6 +310,7 @@ export class ConvexService {
           distributionObjectKey: video.distributionObjectKey,
           playbackUrl: nextPlaybackUrl,
           manifestUrl: nextManifestUrl,
+          dashManifestUrl: nextDashManifestUrl,
           posterUrl: nextPosterUrl,
           sources: nextSources,
           encoder: video.encoder,
@@ -355,6 +366,7 @@ export class ConvexService {
       distributionObjectKey: payload.distributionObjectKey,
       masterPlaylistUrl: payload.manifestUrl ?? undefined,
       manifestUrl: payload.manifestUrl ?? undefined,
+      dashManifestUrl: payload.dashManifestUrl ?? undefined,
       playbackUrl: payload.playbackUrl,
       posterUrl: payload.posterUrl ?? undefined,
       sources: payload.sources && payload.sources.length > 0 ? payload.sources : undefined,
@@ -387,7 +399,23 @@ export class ConvexService {
       clipOutSeconds: payload.clipOutSeconds ?? undefined,
     };
 
-    await unsafeClient.mutation(settings.convex.mutationPath, requestPayload);
+    try {
+      await unsafeClient.mutation(settings.convex.mutationPath, requestPayload);
+    } catch (error) {
+      if (!payload.dashManifestUrl) {
+        throw error;
+      }
+
+      const fallbackPayload = Object.fromEntries(
+        Object.entries(requestPayload).filter(([key]) => key !== 'dashManifestUrl'),
+      );
+      await unsafeClient.mutation(settings.convex.mutationPath, fallbackPayload);
+      this.log(
+        'warn',
+        'Convex registration accepted the media record without dashManifestUrl. Update the backend validator to persist the DASH manifest URL.',
+        jobId,
+      );
+    }
     this.log('info', `Synced ${payload.sourceName} with Convex (${payload.status}).`, jobId);
   }
 

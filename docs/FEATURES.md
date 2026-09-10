@@ -11,9 +11,9 @@ The end-to-end pipeline is:
 1. Watch a designated ingest folder for finished source files.
 2. Wait for the file to stabilize and unlock.
 3. Queue the job so only one heavy transcode runs at a time.
-4. Generate a two-rendition HLS package plus a poster frame.
+4. Generate progressive clip renditions or a four-rung CMAF HLS/DASH package plus a poster frame.
 5. Upload the source file to Backblaze B2 for archive storage.
-6. Upload the HLS package to Cloudflare R2 for playback delivery.
+6. Upload the playback package to Cloudflare R2 for delivery.
 7. Verify uploads when enabled.
 8. Register or update the video in Convex with ingest status and metadata.
 9. Optionally clean up local temp output after success.
@@ -31,7 +31,7 @@ The end-to-end pipeline is:
 - Uses a FIFO queue so only one transcode job runs at a time.
 - Supports auto-starting the watcher on app launch.
 - Supports retrying failed jobs from the dashboard.
-- Supports automatic cleanup of local HLS output and poster files after successful upload and registration.
+- Supports automatic cleanup of local playback output and poster files after successful upload and registration.
 
 ## Manual Offload Workspace
 
@@ -50,10 +50,13 @@ The end-to-end pipeline is:
 ## Pro-Grade Transcode Engine
 
 - Uses FFmpeg for ingest processing.
-- Builds a two-rung adaptive HLS ladder.
+- Builds a four-rung adaptive VOD ladder.
 - Produces a `1920x1080` rendition.
 - Produces a `1280x720` rendition.
-- Produces variant playlists, transport stream segments, and `master.m3u8`.
+- Produces an `854x480` rendition.
+- Produces a `640x360` rendition.
+- Produces a CMAF-compatible HLS/DASH package with shared `.m4s` fragments,
+  `master.m3u8`, and `manifest.mpd`.
 - Extracts source metadata with `ffprobe`, including duration, frame rate, width, and height.
 - Captures source file size from the local file system.
 - Generates a `poster.jpg` frame automatically when enabled.
@@ -70,9 +73,9 @@ The end-to-end pipeline is:
 ## Multi-Cloud Sync
 
 - Uploads the original source file to Backblaze B2 for long-term archive storage.
-- Uploads the generated HLS package to Cloudflare R2 for playback distribution.
+- Uploads the generated playback package to Cloudflare R2 for distribution.
 - Builds public playback URLs from the configured R2 public base URL and distribution object key.
-- Publishes poster URLs alongside the HLS package when a poster frame is generated.
+- Publishes poster URLs alongside the playback package when a poster frame is generated.
 - Supports configurable upload concurrency.
 - Uses `rclone` retries and retry delays during transfer operations.
 - Can verify archive and distribution uploads after sync.
@@ -95,6 +98,7 @@ Each registered video can store:
 - archive object key
 - distribution object key
 - master playlist URL
+- DASH manifest URL
 - playback URL
 - poster URL
 - encoder

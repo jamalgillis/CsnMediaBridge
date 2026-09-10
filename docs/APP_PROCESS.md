@@ -138,13 +138,17 @@ For progressive clips, the app generates:
 - `playback-av1.webm` when AV1 encoding succeeds
 - `poster.jpg` when poster extraction is enabled
 
-For HLS VOD, the app generates:
+For long-form VOD, the app generates a CMAF-compatible HLS/DASH package:
 
 - `1080p`, `720p`, `480p`, and `360p` variants
 - `master.m3u8`
+- `manifest.mpd`
 - variant playlists
 - per-variant init files such as `init_0.mp4`
 - `.m4s` segment files
+
+The HLS and DASH manifests reference the same fragmented MP4 chunks, so the R2
+package does not store duplicate media segments for each streaming protocol.
 
 Platform behavior:
 
@@ -162,9 +166,9 @@ This bucket is meant to keep the full source asset for long-term storage.
 
 The app then copies the output folder to the Cloudflare R2 distribution bucket.
 
-That bucket is meant to hold the playback-ready assets, whether that means an HLS manifest with segments or progressive clip renditions.
+That bucket is meant to hold the playback-ready assets, whether that means a CMAF-compatible HLS/DASH package or progressive clip renditions.
 
-Using the R2 public base URL plus the uploaded object path, the app builds the final playback URL and, when relevant, the final manifest URL.
+Using the R2 public base URL plus the uploaded object path, the app builds the final playback URL and, when relevant, the final HLS and DASH manifest URLs.
 
 ## 9. Convex is notified
 
@@ -175,6 +179,7 @@ Once uploads succeed, the app calls the configured Convex mutation and sends met
 - distribution object key
 - playback URL
 - manifest URL for HLS assets
+- DASH manifest URL for CMAF VOD assets
 - progressive source URLs for clip assets
 - encoder used
 - duration
