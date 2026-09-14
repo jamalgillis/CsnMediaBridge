@@ -9,6 +9,11 @@ export default defineConfig({
   clearScreen: false,
   define: {
     __APP_UPDATE_BASE_URL__: JSON.stringify(process.env.APP_UPDATE_BASE_URL ?? ''),
+    // Public OAuth coordinates, not secrets. Empty ships an ungated build.
+    __CLERK_OAUTH_ISSUER__: JSON.stringify(process.env.CLERK_OAUTH_ISSUER ?? ''),
+    __CLERK_OAUTH_CLIENT_ID__: JSON.stringify(process.env.CLERK_OAUTH_CLIENT_ID ?? ''),
+    // Where stations fetch short-lived storage credentials. Public.
+    __CSN_BROKER_URL__: JSON.stringify(process.env.CSN_BROKER_URL ?? ''),
     __CSN_B2_BUCKET__: JSON.stringify(process.env.CSN_B2_BUCKET ?? ''),
     __CSN_B2_PATH_PREFIX__: JSON.stringify(process.env.CSN_B2_PATH_PREFIX ?? 'vod/archive'),
     __CSN_B2_S3_ENDPOINT__: JSON.stringify(process.env.CSN_B2_S3_ENDPOINT ?? ''),

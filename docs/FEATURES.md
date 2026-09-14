@@ -213,7 +213,13 @@ Each registered video can store:
 - Manual offload destination drive/folder, local copy mode, and image-upload Backblaze prefix.
 - Cloudflare R2 account, bucket, prefix, public base URL, and credentials.
 - Convex deployment URL and mutation path.
-- Secrets stored with Electron Store and encrypted through Electron safe storage when available.
+- Scrubbing the progress bar shows preview images, so a moment can be found
+  without playing through to it. Generated during ingest; switch off under
+  Settings if the extra encode time is not worth it.
+- Playback resumes where the viewer stopped, per station. Positions under 15
+  seconds are ignored and a video watched to the end is forgotten, so resuming
+  never drops someone on the credits.
+- Secrets stored as JSON in the OS application-support directory, readable only by the signed-in user account.
 
 ## Health Monitoring and Resilience
 

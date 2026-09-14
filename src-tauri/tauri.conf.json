@@ -19,7 +19,9 @@
         "height": 980,
         "minWidth": 1180,
         "minHeight": 760,
-        "backgroundColor": "#09111d"
+        "backgroundColor": "#050505",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
@@ -32,6 +34,18 @@
     "icon": [
       "../assets/icon.icns",
       "../assets/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://downloads.example.com/csn-media-bridge/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3RkZDM0UzNUZDQzcwQQpSV1FLeC93MVB2eC9DeXIvTE81VFhhV1pvZ0U0QUpCMENFVDNpbkpqSkI0Zldzb3RQaHMvV0xHbgo=",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

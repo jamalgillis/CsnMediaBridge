@@ -32,7 +32,9 @@ const colors = {
   muted: '#8c8c8c',
   dim: '#6b6b6b',
   faint: '#5a5a5a',
-  ghost: '#4a4a4a',
+  // The DS default (#4a4a4a) fails contrast on ink, so CSN v2 overrides
+  // --color-ghost to the dim step. See design.md §1.
+  ghost: '#8c8c8c',
 
   // The single brand color. Live dots, active nav, primary actions, focus.
   accent: {

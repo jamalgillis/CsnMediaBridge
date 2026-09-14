@@ -113,8 +113,23 @@ function installTauriMediaBridge() {
     getStorageUsage: () => invoke('get_storage_usage'),
     listLiveStreamHandoffJobs: () => invoke('list_live_stream_handoff_jobs'),
     wakeLiveStreamHandoffWorker: () => invoke('wake_live_stream_handoff_worker'),
+    convertLiveStreamRecording: (handoffJobId) =>
+      invoke('convert_live_stream_recording', { handoffJobId }),
+    listStreamRecordings: (request) => invoke('list_stream_recordings', { request }),
+    listArchivedStreamUids: () => invoke('list_archived_stream_uids'),
+    archiveStreamRecording: (recording) => invoke('archive_stream_recording', { request: recording }),
+    downloadStreamRecording: (recording) => invoke('download_stream_recording', { request: recording }),
+    cancelStreamTransfer: (uid) => invoke('cancel_stream_transfer', { uid }),
+    dismissStreamTransfer: (uid) => invoke('dismiss_stream_transfer', { uid }),
+    listStreamTransfers: () => invoke('list_stream_transfers'),
+    onStreamTransfersUpdate: (listener) => listen(IPC_CHANNELS.streamTransfersUpdated, listener),
+    authStatus: () => invoke('auth_status'),
+    authSignIn: () => invoke('auth_sign_in'),
+    authSignOut: () => invoke('auth_sign_out'),
+    authGetToken: () => invoke('auth_get_token'),
     onStateUpdate: (listener) => listen(IPC_CHANNELS.stateUpdated, listener),
     onOffloadUpdate: (listener) => listen(IPC_CHANNELS.offloadUpdated, listener),
+    onAuthUpdate: (listener) => listen(IPC_CHANNELS.authUpdated, listener),
     onLiveStreamHandoffUpdate: (listener) =>
       listen(IPC_CHANNELS.liveStreamHandoffUpdated, listener),
   };

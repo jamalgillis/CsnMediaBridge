@@ -88,7 +88,42 @@ Users need one manual upgrade to a build that includes the updater. After that, 
 
 ## Notes
 
-- Windows uses the native Electron / Squirrel updater path.
-- macOS does not use native in-app install yet because Electron requires a signed app for automatic updates on macOS.
-- macOS users can still see that an update exists, download the newer build, replace the app, and approve it in `Privacy & Security` if Gatekeeper blocks it.
-- If you later add a paid Apple Developer account, the repo is already close to supporting signed/notarized macOS releases.
+In-app updates are handled by `tauri-plugin-updater`.
+
+### The signing key
+
+Tauri refuses to install an update it cannot verify, so releases have to be
+signed. Generate a keypair once:
+
+```bash
+pnpm exec tauri signer generate -w ~/.tauri/csn-media-bridge.key
+```
+
+- The **public** key goes in `src-tauri/tauri.conf.json` under
+  `plugins.updater.pubkey`. It is already there.
+- The **private** key is a secret. Keep it in a password manager and add it to
+  the repository's Actions secrets as `TAURI_SIGNING_PRIVATE_KEY` (paste the
+  file's contents, not its path). If you set a password on the key, add that as
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` too.
+- `.gitignore` covers `*.key`, but the key should never be inside the repo at
+  all.
+
+> Losing the private key means existing installs can no longer verify updates
+> from you. Recovering means shipping a new public key in a build every station
+> has to install by hand.
+
+### What a tagged release does
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which:
+
+1. builds signed macOS and Windows bundles,
+2. attaches the installers — `.dmg`, `-setup.exe`, `.msi` — plus the signed
+   updater artifacts to the GitHub Release,
+3. merges each platform's entry into a single `latest.json` and deploys it to
+   GitHub Pages.
+
+Point Settings → **Feed base URL** at the directory holding `latest.json`, e.g.
+`https://<owner>.github.io/<repo>`.
+
+- If you later add a paid Apple Developer account, signing and notarization can
+  be added to the `tauri build` step in the release workflow.

@@ -1,127 +1,74 @@
 import { useEffect, useState } from 'react';
-import GlassCard from '../components/GlassCard';
-import ProgressBar from '../components/ProgressBar';
-import StatusBadge from '../components/StatusBadge';
+import { Link } from 'react-router-dom';
+import {
+  Disclosure,
+  ErrorNote,
+  Fact,
+  FactList,
+  PageHeading,
+  ProgressTrack,
+  QuietNote,
+  Screen,
+  Toast,
+  useToast,
+} from '../components/csn/bridge';
+import { GhostButton } from '../components/csn/ui';
 import { useBridge } from '../context/BridgeContext';
+import { formatBytes } from '../lib/plain';
 import type { OffloadSourceSnapshot, OffloadTaskSnapshot } from '../shared/types';
 
+/**
+ * Offload a card.
+ *
+ * The screen is a copy in progress, stated as phases rather than as a task
+ * record: where the files come from, where they go, and how far each phase has
+ * got. What gets skipped is said out loud, and so is the one thing an operator
+ * always wants to know before starting — that nothing is deleted from the card.
+ */
+
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
+  return error instanceof Error ? error.message : String(error);
 }
 
-function formatFileSize(value: number) {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 'Unknown size';
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let currentValue = value;
-  let unitIndex = 0;
-
-  while (currentValue >= 1024 && unitIndex < units.length - 1) {
-    currentValue /= 1024;
-    unitIndex += 1;
-  }
-
-  const precision = currentValue >= 100 || unitIndex === 0 ? 0 : 1;
-  return `${currentValue.toFixed(precision)} ${units[unitIndex]}`;
-}
-
-function getTaskTone(task: OffloadTaskSnapshot | null): 'good' | 'active' | 'warning' | 'danger' | 'neutral' {
-  if (!task) {
-    return 'neutral';
-  }
-
-  if (task.status === 'complete') {
-    return 'good';
-  }
-
-  if (task.status === 'error') {
-    return 'danger';
-  }
-
-  return 'active';
-}
-
-function getTaskLabel(task: OffloadTaskSnapshot | null) {
-  if (!task) {
-    return 'No Offload Yet';
-  }
-
-  return task.status[0].toUpperCase() + task.status.slice(1);
-}
-
-function ToggleCard({
-  title,
-  description,
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label
-      className="flex items-start gap-3 rounded-control border p-4 border-rule bg-ink"
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        disabled={disabled}
-        className="mt-1 h-4 w-4 rounded text-accent-hi focus:ring-accent-hi disabled:cursor-not-allowed disabled:opacity-60 border-rule bg-transparent"
-      />
-      <span>
-        <span className="block font-medium text-paper">{title}</span>
-        <span className="mt-1 block text-sm text-muted">
-          {description}
-        </span>
-      </span>
-    </label>
-  );
-}
-
-const INPUT_CLASS = 'csn-input h-11';
+const RUNNING_STATUSES = ['preparing', 'copying', 'converting', 'uploading'];
 
 export default function OffloadPage() {
-  const { settings, state } = useBridge();
+  const { settings, state, saveSettings } = useBridge();
+  const { toast, flash } = useToast();
+
   const [source, setSource] = useState<OffloadSourceSnapshot | null>(null);
   const [jobName, setJobName] = useState('');
-  const [convertImagesToWebp, setConvertImagesToWebp] = useState(true);
-  const [uploadToB2, setUploadToB2] = useState(false);
   const [isPickingSource, setIsPickingSource] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<OffloadTaskSnapshot | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const b2Configured = Boolean(
-    settings.b2.bucket && settings.b2.keyId && settings.b2.applicationKey,
-  );
+  // The two "what to include" preferences live in Settings, so a card offloads
+  // the same way every time; this screen only reflects them.
+  const convertImagesToWebp = settings.offload.convertImagesToWebp;
+  const uploadImagesToCloud = settings.offload.uploadImagesToCloud;
+
+  const b2Configured = Boolean(settings.b2.bucket && settings.b2.keyId && settings.b2.applicationKey);
   const canConvertImages = state.system.ffmpegAvailable !== false;
   const canUploadImages = b2Configured && state.system.rcloneAvailable !== false;
+
+  const webpOn = convertImagesToWebp && canConvertImages;
+  const uploadOn = uploadImagesToCloud && canUploadImages;
 
   useEffect(() => {
     let isMounted = true;
 
-    void window.mediaBridge.getOffloadTask()
+    void window.mediaBridge
+      .getOffloadTask()
       .then((task) => {
         if (!isMounted || !task) {
           return;
         }
-
         setActiveTask(task);
         setJobName((current) => current || task.jobName);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (isMounted) {
           setPageError(getErrorMessage(error));
         }
@@ -138,49 +85,26 @@ export default function OffloadPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!canConvertImages) {
-      setConvertImagesToWebp(false);
-    }
-  }, [canConvertImages]);
-
-  useEffect(() => {
-    if (!canUploadImages) {
-      setUploadToB2(false);
-    }
-  }, [canUploadImages]);
-
-  const isTaskRunning = Boolean(
-    activeTask &&
-    ['preparing', 'copying', 'converting', 'uploading'].includes(activeTask.status),
-  );
-  const isResumableTask = Boolean(
+  const isTaskRunning = Boolean(activeTask && RUNNING_STATUSES.includes(activeTask.status));
+  const isPaused = activeTask?.status === 'paused';
+  const isResumable = Boolean(
     source &&
-    activeTask &&
-    ['paused', 'error', 'canceled'].includes(activeTask.status) &&
-    activeTask.sourcePath === source.sourcePath &&
-    activeTask.jobName === (jobName.trim() || source.sourceName),
+      activeTask &&
+      ['paused', 'error', 'canceled'].includes(activeTask.status) &&
+      activeTask.sourcePath === source.sourcePath &&
+      activeTask.jobName === (jobName.trim() || source.sourceName),
   );
-  const canStart =
-    Boolean(source) &&
-    Boolean(settings.offload.localFolder) &&
-    !isSubmitting &&
-    !isTaskRunning;
-  const imageSummary = source
-    ? `${source.fileCount} files, ${source.imageCount} images, ${source.videoCount} video files, ${source.otherCount} other files.`
-    : 'Choose a shoot folder to see the offload summary.';
+  const canStart = Boolean(source) && Boolean(settings.offload.localFolder) && !isSubmitting && !isTaskRunning;
 
   async function handleChooseSource() {
     setIsPickingSource(true);
     setPageError(null);
-    setNotice(null);
 
     try {
       const nextSource = await window.mediaBridge.chooseOffloadSource();
       if (!nextSource) {
         return;
       }
-
       setSource(nextSource);
       setJobName(nextSource.sourceName);
       setActiveTask(null);
@@ -191,25 +115,23 @@ export default function OffloadPage() {
     }
   }
 
-  async function handleStartOffload() {
+  async function handleStart() {
     if (!source) {
       return;
     }
 
     setIsSubmitting(true);
     setPageError(null);
-    setNotice(null);
 
     try {
       const result = await window.mediaBridge.runOffloadTask({
         sourcePath: source.sourcePath,
         jobName: jobName.trim() || source.sourceName,
-        convertImagesToWebp,
-        uploadToB2,
+        convertImagesToWebp: webpOn,
+        uploadToB2: uploadOn,
       });
-
       setActiveTask(result);
-      setNotice(result.message);
+      flash(isResumable ? 'Picking up where it left off' : 'Copying — nothing is removed from the card');
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -217,274 +139,280 @@ export default function OffloadPage() {
     }
   }
 
-  async function handlePauseOffload() {
+  async function handlePause() {
     try {
       const result = await window.mediaBridge.pauseOffloadTask();
       if (result) {
         setActiveTask(result);
-        setNotice(result.message);
+        flash('Paused — pick up any time');
       }
     } catch (error) {
       setPageError(getErrorMessage(error));
     }
   }
 
-  async function handleCancelOffload() {
+  async function handleCancel() {
     try {
       const result = await window.mediaBridge.cancelOffloadTask();
       if (result) {
         setActiveTask(result);
-        setNotice(result.message);
+        flash('Stopped — what copied so far is kept');
       }
     } catch (error) {
       setPageError(getErrorMessage(error));
     }
   }
 
-  return (
-    <div className="px-6 pb-11 pt-[22px]">
-      <div className="mb-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <h1 className="font-display text-page text-paper">Offload</h1>
-            <p className="mt-1.5 text-copy text-muted">
-              Pick a post-shoot folder, copy the full shoot to your designated local drive, generate
-              a parallel `web-ready` set of `webp` images for website use, and optionally upload only
-              the picture assets to Backblaze B2. Video files always stay local in the copied package.
-            </p>
-          </div>
+  const intro =
+    'Copies everything off a camera card onto your offload drive. ' +
+    (uploadOn
+      ? webpOn
+        ? 'Video stays local; photos also get web-friendly copies and go to the cloud.'
+        : 'Video stays local; photos also go to the cloud.'
+      : webpOn
+        ? 'Everything stays on the drive — photos also get web-friendly copies.'
+        : 'Everything stays on the drive; nothing is uploaded.');
 
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge tone={state.system.ffmpegAvailable ? 'good' : 'warning'}>
-              {state.system.ffmpegAvailable ? 'FFmpeg Ready' : 'FFmpeg Missing'}
-            </StatusBadge>
-            <StatusBadge tone={state.system.rcloneAvailable ? 'good' : 'warning'}>
-              {state.system.rcloneAvailable ? 'Rclone Ready' : 'Rclone Missing'}
-            </StatusBadge>
-            <StatusBadge tone={getTaskTone(activeTask)}>{getTaskLabel(activeTask)}</StatusBadge>
-            <button
-              type="button"
+  const skipped = [
+    !webpOn ? 'web-friendly copies' : null,
+    !uploadOn ? 'the photo upload' : null,
+  ].filter(Boolean) as string[];
+
+  const phases = [
+    {
+      key: 'copy',
+      label: 'Copying video and photos',
+      detail: activeTask
+        ? `${activeTask.copiedFiles} of ${activeTask.totalFiles} files`
+        : source
+          ? `${source.fileCount} files · ${formatBytes(source.totalBytes)}`
+          : 'waiting for a card',
+      value: activeTask?.copyProgress ?? 0,
+      on: true,
+    },
+    {
+      key: 'webp',
+      label: 'Making web-friendly photo copies',
+      detail: activeTask
+        ? `${activeTask.convertedImageCount} of ${activeTask.imageCount} photos`
+        : 'starts alongside the copy',
+      value: activeTask?.conversionProgress ?? 0,
+      on: webpOn || Boolean(activeTask?.webReadyPath),
+    },
+    {
+      key: 'upload',
+      label: 'Sending photos to the cloud',
+      detail: activeTask?.uploadEnabled ? activeTask.message : 'starts when copying finishes',
+      value: activeTask?.uploadProgress ?? 0,
+      on: uploadOn || Boolean(activeTask?.uploadEnabled),
+    },
+  ].filter((phase) => phase.on);
+
+  async function setPreference(key: 'convertImagesToWebp' | 'uploadImagesToCloud', next: boolean) {
+    await saveSettings({ ...settings, offload: { ...settings.offload, [key]: next } });
+  }
+
+  return (
+    <Screen label="Offload">
+      <div className="max-w-[760px] px-[30px] pt-[30px]">
+        <PageHeading title="Offload a card" subhead={intro} />
+      </div>
+
+      {pageError ? (
+        <div className="max-w-[760px] px-[30px] pt-5">
+          <ErrorNote>{pageError}</ErrorNote>
+        </div>
+      ) : null}
+
+      <div className="flex max-w-[760px] flex-col gap-2.5 px-[30px] pt-[26px]">
+        <div className="csn-card px-5 py-[18px]">
+          <div className="flex flex-wrap items-center gap-3.5">
+            <div className="min-w-[190px] flex-[1_1_240px]">
+              <div className="text-[12px] text-quiet">Copying from</div>
+              <div className="mt-[3px] break-all text-row font-semibold text-paper">
+                {source?.sourcePath ?? 'No card chosen yet'}
+              </div>
+              <div className="mt-1 text-caption text-quiet">
+                {source
+                  ? `${source.fileCount} files · ${formatBytes(source.totalBytes)} · ${source.imageCount} photos, ${source.videoCount} clips`
+                  : 'Choose a camera card, shuttle drive, or shoot folder.'}
+              </div>
+            </div>
+            <GhostButton
               onClick={() => void handleChooseSource()}
               disabled={isPickingSource || isSubmitting || isTaskRunning}
-              className="csn-btn-primary"
             >
-              {isPickingSource ? 'Opening Browser…' : source ? 'Choose Another Folder' : 'Choose Shoot Folder'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handlePauseOffload()}
-              disabled={!isTaskRunning}
-              className="csn-btn-secondary"
-            >
-              Pause
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCancelOffload()}
-              disabled={!isTaskRunning}
-              className="csn-btn-danger"
-            >
-              Cancel
-            </button>
+              {isPickingSource ? 'Opening…' : source ? 'Change' : 'Choose a card'}
+            </GhostButton>
           </div>
-        </div>
 
-        {(notice || pageError) && (
-          <div className="mt-4 space-y-2">
-            {notice && <p className="text-copy text-state-ok">{notice}</p>}
-            {pageError && <p className="text-copy text-state-danger">{pageError}</p>}
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-12">
-        <GlassCard className="xl:col-span-8">
-          <div className="flex flex-col gap-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-control border p-4 border-rule bg-ink">
-                <p className="font-condensed text-overline uppercase text-dim">
-                  Selected Source
-                </p>
-                <p className="mt-3 font-display text-section text-paper">
-                  {source?.sourceName ?? 'No folder selected'}
-                </p>
-                <p className="mt-2 text-sm text-muted">
-                  {source?.sourcePath ?? 'Choose a folder from a camera card, shuttle drive, or local shoot archive.'}
-                </p>
-              </div>
-
-              <div className="rounded-control border p-4 border-rule bg-ink">
-                <p className="font-condensed text-overline uppercase text-dim">
-                  Destination
-                </p>
-                <p className="mt-3 font-display text-section text-paper">
-                  {settings.offload.localFolder || 'Configure in Settings'}
-                </p>
-                <p className="mt-2 text-sm text-muted">
-                  Full packages mirror the selected source directly inside the dated offload bundle, with an optional `web-ready/` folder for converted images. Video files stay in that clean copied structure and are not sent to the cloud.
-                </p>
-                <p className="mt-2 text-sm text-muted">
-                  Local copy mode:{' '}
-                  {settings.offload.localCopyMode === 'fast'
-                    ? 'Fast metadata copy'
-                    : 'Safe checksum copy'}
-                  .
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block font-condensed text-overline uppercase text-dim">
-                Offload Label
-              </label>
-              <input
-                value={jobName}
-                onChange={(event) => setJobName(event.target.value)}
-                placeholder="Championship postgame shoot"
-                className={INPUT_CLASS}
-              />
-              <p className="mt-2 text-sm text-muted">
-                This label names the generated local package folder and the image-only cloud prefix.
-              </p>
-            </div>
-
-            <div className="grid gap-4">
-              <ToggleCard
-                title="Create web-ready image copies"
-                description="Converts every PNG, JPG, and JPEG in the selected folder into mirrored `.webp` files under `web-ready/` for website delivery."
-                checked={convertImagesToWebp}
-                onChange={setConvertImagesToWebp}
-                disabled={!canConvertImages || isSubmitting}
-              />
-              <ToggleCard
-                title="Upload picture assets to Backblaze B2"
-                description="Uploads still-image assets only. Original images mirror the clean local package structure, and optional `web-ready` webp copies go alongside them in Backblaze while video files remain local."
-                checked={uploadToB2}
-                onChange={setUploadToB2}
-                disabled={!canUploadImages || isSubmitting}
-              />
-            </div>
-
-            <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
-              {settings.offload.localFolder
-                ? `Video files and full local packages will be written under ${settings.offload.localFolder}.`
-                : 'Set an offload destination folder in Settings before you start.'}
-              {settings.offload.localFolder
-                ? settings.offload.localCopyMode === 'fast'
-                  ? ' Fast mode uses clone-friendly copies plus size and modified-time checks to speed up first-time local offloads.'
-                  : ' Safe mode reads full-file checksums before and after local copy for stricter verification.'
-                : ''}
-              {uploadToB2
-                ? ` Image uploads will land under ${settings.b2.bucket}/${settings.offload.b2PathPrefix || 'offloads'}.`
-                : ''}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-rule">
-              <div className="text-sm text-muted">
-                {imageSummary} {source ? `Source size: ${formatFileSize(source.totalBytes)}.` : ''}
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleStartOffload()}
-                disabled={!canStart}
-                className="rounded-control bg-accent px-5 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi active:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSubmitting
-                  ? 'Offloading...'
-                  : isResumableTask
-                    ? 'Resume Offload'
-                    : 'Start Offload'}
-              </button>
-            </div>
-          </div>
-        </GlassCard>
-
-        <div className="space-y-6 xl:col-span-4">
-          <GlassCard>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-condensed text-overline uppercase text-dim">
-                  Latest Task
-                </p>
-                <h2 className="mt-2 font-display text-section text-paper">
-                  {activeTask?.jobName ?? 'Waiting'}
-                </h2>
-              </div>
-              <StatusBadge tone={getTaskTone(activeTask)}>{getTaskLabel(activeTask)}</StatusBadge>
-            </div>
-
-            <div className="mt-5 space-y-4">
-              <ProgressBar
-                label="Overall"
-                value={activeTask?.overallProgress ?? 0}
-                variant="primary"
-              />
-              <ProgressBar
-                label="Copy"
-                value={activeTask?.copyProgress ?? 0}
-                variant="secondary"
-              />
-              {convertImagesToWebp || Boolean(activeTask?.webReadyPath) ? (
-                <ProgressBar
-                  label="WebP"
-                  value={activeTask?.conversionProgress ?? 0}
-                  variant="secondary"
-                />
-              ) : null}
-              {uploadToB2 || activeTask?.uploadEnabled ? (
-                <ProgressBar
-                  label="Image Upload"
-                  value={activeTask?.uploadProgress ?? 0}
-                  variant="secondary"
-                />
-              ) : null}
-            </div>
-
-            <div className="mt-5 space-y-3 text-sm text-body">
-              <p>{activeTask?.message ?? 'No manual offload has run yet.'}</p>
-              {activeTask ? (
+          <div className="mt-4 border-t border-rule-soft pt-4">
+            <div className="text-[12px] text-quiet">Copying to</div>
+            <div className="mt-[3px] break-all text-copy text-body">
+              {settings.offload.localFolder ? (
+                `${settings.offload.localFolder}/${jobName.trim() || source?.sourceName || '…'}/`
+              ) : (
                 <>
-                  <p>
-                    {activeTask.copiedFiles} of {activeTask.totalFiles} files copied.{' '}
-                    {formatFileSize(activeTask.copiedBytes)} of {formatFileSize(activeTask.totalBytes)}.
-                  </p>
-                  <p>
-                    {activeTask.convertedImageCount} image conversions completed. {activeTask.skippedFiles} verified files were reused from the existing package.
-                  </p>
+                  No offload drive set yet —{' '}
+                  <Link to="/settings" className="underline">
+                    choose one in Settings
+                  </Link>
+                  .
                 </>
-              ) : null}
+              )}
             </div>
-          </GlassCard>
-
-          <GlassCard>
-            <p className="font-condensed text-overline uppercase text-dim">
-              Package Paths
-            </p>
-            <div className="mt-4 space-y-4 text-sm text-body">
-              <div>
-                <p className="font-semibold text-paper">Local Package</p>
-                <p className="mt-1 break-all">{activeTask?.localDestinationPath ?? 'Waiting for first offload.'}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-paper">Web-ready Images</p>
-                <p className="mt-1 break-all">{activeTask?.webReadyPath ?? 'Enable image conversion to generate this folder.'}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-paper">Backblaze Image Prefix</p>
-                <p className="mt-1 break-all">{activeTask?.cloudObjectKey ?? 'Enable Backblaze upload to generate this image-only prefix.'}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-paper">Manifest</p>
-                <p className="mt-1 break-all">{activeTask?.manifestPath ?? 'Starts after the first offload package is created.'}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-paper">Transfer Log</p>
-                <p className="mt-1 break-all">{activeTask?.logPath ?? 'Starts after the first offload package is created.'}</p>
-              </div>
-            </div>
-          </GlassCard>
+          </div>
         </div>
+
+        {phases.map((phase) => (
+          <div key={phase.key} className="csn-card px-5 py-4">
+            <div className="flex flex-wrap items-baseline gap-3">
+              <span className="min-w-[140px] flex-[1_1_180px] text-copy font-semibold text-paper">
+                {phase.label}
+              </span>
+              <span className="flex-none machine text-caption text-quiet">{phase.detail}</span>
+            </div>
+            <div className="mt-3">
+              <ProgressTrack value={phase.value} thick />
+            </div>
+          </div>
+        ))}
       </div>
-    </div>
+
+      <div className="flex max-w-[760px] flex-wrap gap-2.5 px-[30px] pt-5">
+        {isTaskRunning ? (
+          <GhostButton onClick={() => void handlePause()}>Pause</GhostButton>
+        ) : (
+          <GhostButton onClick={() => void handleStart()} disabled={!canStart}>
+            {isSubmitting ? 'Starting…' : isResumable || isPaused ? 'Resume' : 'Start copying'}
+          </GhostButton>
+        )}
+        <GhostButton onClick={() => void handleCancel()} disabled={!isTaskRunning && !isPaused}>
+          Cancel
+        </GhostButton>
+      </div>
+
+      {skipped.length > 0 ? (
+        <div className="max-w-[760px] px-[30px] pt-4">
+          <QuietNote>
+            Skipping {skipped.join(' and ')} — you can turn that back on in{' '}
+            <Link to="/settings" className="underline">
+              Settings
+            </Link>
+            .
+          </QuietNote>
+        </div>
+      ) : null}
+
+      {!canConvertImages && convertImagesToWebp ? (
+        <div className="max-w-[760px] px-[30px] pt-2.5">
+          <QuietNote>
+            Web-friendly copies need FFmpeg, which this machine can’t find, so that phase is off for
+            now.
+          </QuietNote>
+        </div>
+      ) : null}
+      {!canUploadImages && uploadImagesToCloud ? (
+        <div className="max-w-[760px] px-[30px] pt-2.5">
+          <QuietNote>
+            Sending photos to the cloud needs rclone and cloud storage set up, so that phase is off
+            for now.
+          </QuietNote>
+        </div>
+      ) : null}
+
+      <div className="max-w-[760px] px-[30px] pt-3.5 text-caption text-pretty text-muted">
+        Nothing is deleted from the card. You can stop and resume this copy whenever you need to.
+      </div>
+
+      <div className="max-w-[760px] px-[30px] pt-[22px]">
+        <Disclosure
+          open={detailsOpen}
+          onToggle={() => setDetailsOpen((open) => !open)}
+          showLabel="Show technical details"
+          hideLabel="Hide technical details"
+        />
+      </div>
+
+      {detailsOpen ? (
+        <div className="flex max-w-[760px] flex-col gap-4 px-[30px] pt-3.5">
+          <label className="block">
+            <span className="csn-label">Name this offload</span>
+            <input
+              value={jobName}
+              onChange={(event) => setJobName(event.target.value)}
+              placeholder={source?.sourceName ?? 'Championship postgame shoot'}
+              disabled={isTaskRunning}
+              className="csn-input"
+            />
+          </label>
+
+          <FactList>
+            <div className="csn-hair-row flex flex-wrap items-center gap-3.5 px-4 py-3.5">
+              <div className="min-w-[180px] flex-[1_1_240px]">
+                <div className="text-copy font-semibold text-paper">
+                  Make web-friendly photo copies
+                </div>
+                <div className="mt-[3px] text-caption text-pretty text-quiet">
+                  Saves a smaller webp version of every photo next to the originals.
+                </div>
+              </div>
+              <GhostButton
+                onClick={() => void setPreference('convertImagesToWebp', !convertImagesToWebp)}
+              >
+                {convertImagesToWebp ? 'On' : 'Off'}
+              </GhostButton>
+            </div>
+            <div className="csn-hair-row flex flex-wrap items-center gap-3.5 px-4 py-3.5">
+              <div className="min-w-[180px] flex-[1_1_240px]">
+                <div className="text-copy font-semibold text-paper">Send photos to the cloud</div>
+                <div className="mt-[3px] text-caption text-pretty text-quiet">
+                  Uploads the photos only. Video always stays on the offload drive.
+                </div>
+              </div>
+              <GhostButton
+                onClick={() => void setPreference('uploadImagesToCloud', !uploadImagesToCloud)}
+              >
+                {uploadImagesToCloud ? 'On' : 'Off'}
+              </GhostButton>
+            </div>
+          </FactList>
+
+          <FactList>
+            <Fact wide label="Copy mode" value={settings.offload.localCopyMode} machine />
+            <Fact
+              wide
+              label="Local package"
+              value={activeTask?.localDestinationPath ?? '—'}
+              machine
+            />
+            <Fact wide label="Web-ready folder" value={activeTask?.webReadyPath ?? '—'} machine />
+            <Fact wide label="Cloud prefix" value={activeTask?.cloudObjectKey ?? '—'} machine />
+            <Fact wide label="Manifest" value={activeTask?.manifestPath ?? '—'} machine />
+            <Fact wide label="Transfer log" value={activeTask?.logPath ?? '—'} machine />
+            <Fact
+              wide
+              label="Reused files"
+              value={activeTask ? String(activeTask.skippedFiles) : '—'}
+              machine
+            />
+            <Fact
+              wide
+              label="Bytes copied"
+              value={
+                activeTask
+                  ? `${formatBytes(activeTask.copiedBytes)} of ${formatBytes(activeTask.totalBytes)}`
+                  : '—'
+              }
+              machine
+            />
+          </FactList>
+
+          {activeTask?.errorMessage ? <ErrorNote>{activeTask.errorMessage}</ErrorNote> : null}
+        </div>
+      ) : null}
+
+      <Toast message={toast} />
+    </Screen>
   );
 }

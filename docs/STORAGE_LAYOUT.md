@@ -317,6 +317,6 @@ Backend files live in the CSN sports app, which owns the Convex codebase.
 | Lifecycle sweeps                          | csn: `convex/crons.ts`                          |
 
 The two key-building modules are intentional duplicates — Convex functions and
-the Electron bundle are separate deployment units with no shared package, and
+the desktop bundle are separate deployment units with no shared package, and
 the backend must be able to reject a bad key even when a client is running an
 old build. They are small and change together.

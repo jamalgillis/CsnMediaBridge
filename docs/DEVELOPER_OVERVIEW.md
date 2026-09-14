@@ -4,7 +4,7 @@ This document gives developers a fast orientation to the current scope of CSN Me
 
 ## What The App Does
 
-CSN Media Bridge is an Electron desktop app for media ingest, VOD management, and post-shoot offload workflows.
+CSN Media Bridge is a Tauri desktop app for media ingest, VOD management, and post-shoot offload workflows.
 
 It currently supports:
 
@@ -24,21 +24,30 @@ It currently supports:
 ## Main Technical Components
 
 - Renderer: React + Tailwind UI
-- Desktop shell: Electron
+- Desktop shell: Tauri (Rust)
 - Media processing: FFmpeg and ffprobe
 - Cloud transfer: `rclone`
-- Persistence: Electron Store with safe-storage encryption where available
-- Backend registration: Convex
+- Persistence: JSON under the OS application-support directory
+- Backend registration: Convex, over its HTTP API
 
-## Main Process Services
+## The Host
 
-- `WatcherService`
-- `TranscodeService`
-- `SyncService`
-- `OffloadService`
-- `ConvexService`
-- `StoreService`
-- `AppUpdateService`
+The host is a single Rust file, `src-tauri/src/lib.rs`. Every capability the
+renderer can reach is a `#[tauri::command]` in it, named after the channel in
+`src/shared/ipc.ts`, and grouped roughly as:
+
+- watch-folder ingest and the file-readiness check
+- transcode (progressive MP4 and CMAF HLS/DASH) and poster extraction
+- rclone transfer, removal, listing and upload auditing
+- Convex registration, metadata updates, deletion and URL repair
+- offload: resumable copy, `webp` conversion, image-only upload
+- trim export
+- Backblaze presigning (SigV4, signed in-process) for archive preview
+- the live-stream handoff worker
+- a small local media proxy so the webview can play remote and local files
+
+`src/tauriBridge.ts` maps `window.mediaBridge` onto those commands, so the
+renderer never names a command directly.
 
 ## Offload Workflow
 

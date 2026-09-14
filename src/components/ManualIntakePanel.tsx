@@ -1,33 +1,20 @@
-import { useMemo, useState } from 'react';
-import GlassCard from './GlassCard';
-import StatusBadge from './StatusBadge';
+import { useState } from 'react';
 import { useBridge } from '../context/BridgeContext';
-import type {
-  ManualIntakeSourceSnapshot,
-  ManualPipelineRoute,
-} from '../shared/types';
+import { resolveDeliveryType } from '../shared/media';
+import { formatBytes, formatClock } from '../lib/plain';
+import type { ManualIntakeSourceSnapshot } from '../shared/types';
+import { ErrorNote, QuietNote } from './csn/bridge';
+import { Eyebrow, GhostButton } from './csn/ui';
 
-const routeOptions: Array<{
-  id: ManualPipelineRoute;
-  label: string;
-  detail: string;
-}> = [
-  {
-    id: 'web_streaming',
-    label: 'Web VOD',
-    detail: 'Full video, auto streaming',
-  },
-  {
-    id: 'clip_progressive',
-    label: 'Clip',
-    detail: 'Short clip, direct playback',
-  },
-  {
-    id: 'review_draft',
-    label: 'Review Draft',
-    detail: 'VOD queued for review',
-  },
-];
+/**
+ * Adding a video by hand.
+ *
+ * The watch folder is the normal way in; this is the exception, for a file that
+ * never landed there. It keeps the Home screen's voice — one plain sentence
+ * about what will happen to the file, and the delivery decision stated rather
+ * than configured, because the pipeline already knows the right answer from the
+ * video's length.
+ */
 
 function splitValues(value: string) {
   return Array.from(
@@ -40,31 +27,13 @@ function splitValues(value: string) {
   );
 }
 
-function formatBytes(value: number | null | undefined) {
-  if (!value) {
-    return '0 B';
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let size = value;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
 function getFallbackTitle(source: ManualIntakeSourceSnapshot | null) {
   return source?.sourceFileName.replace(/\.[^.]+$/, '') ?? '';
 }
 
 export default function ManualIntakePanel() {
-  const { chooseManualIntakeSource, enqueueManualIntake } = useBridge();
+  const { chooseManualIntakeSource, enqueueManualIntake, settings } = useBridge();
   const [source, setSource] = useState<ManualIntakeSourceSnapshot | null>(null);
-  const [route, setRoute] = useState<ManualPipelineRoute>('web_streaming');
   const [title, setTitle] = useState('');
   const [projectName, setProjectName] = useState('');
   const [eventName, setEventName] = useState('');
@@ -76,10 +45,21 @@ export default function ManualIntakePanel() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const selectedRoute = useMemo(
-    () => routeOptions.find((option) => option.id === route) ?? routeOptions[0],
-    [route],
-  );
+  const thresholdSeconds = settings.autoProgressiveMaxDurationSeconds;
+  const automaticDelivery = source?.durationSeconds
+    ? resolveDeliveryType({
+        requestedDelivery: 'auto',
+        durationSeconds: source.durationSeconds,
+        autoProgressiveMaxDurationSeconds: thresholdSeconds,
+      })
+    : null;
+
+  const plannedTreatment =
+    automaticDelivery === 'progressive'
+      ? 'It is short, so it will be made into a single downloadable file.'
+      : automaticDelivery === 'hls'
+        ? 'It is long enough that it will be prepared for streaming.'
+        : `Anything up to ${formatClock(thresholdSeconds)} becomes a single file; anything longer is prepared for streaming.`;
 
   async function handleChooseSource() {
     setIsChoosing(true);
@@ -105,7 +85,7 @@ export default function ManualIntakePanel() {
 
   async function handleSubmit() {
     if (!source) {
-      setLocalError('Choose a file before sending content to the queue.');
+      setLocalError('Choose a video first.');
       return;
     }
 
@@ -116,7 +96,7 @@ export default function ManualIntakePanel() {
     try {
       await enqueueManualIntake({
         sourcePath: source.sourcePath,
-        route,
+        route: 'web_streaming',
         title: title.trim() || undefined,
         projectName: projectName.trim() || undefined,
         eventName: eventName.trim() || undefined,
@@ -124,7 +104,7 @@ export default function ManualIntakePanel() {
         playlistTitles: splitValues(playlistInput),
         description: description.trim() || undefined,
       });
-      setSuccessMessage(`${source.sourceFileName} queued for ${selectedRoute.label}.`);
+      setSuccessMessage(`${source.sourceFileName} is in the queue.`);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -133,156 +113,104 @@ export default function ManualIntakePanel() {
   }
 
   return (
-    <GlassCard className="col-span-full xl:col-span-4">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="font-display text-section text-paper">Manual Intake</h2>
-          <p className="mt-1 text-sm text-muted">
-            {source ? source.sourceFileName : 'No file selected'}
-          </p>
+    <div className="csn-card px-5 py-[18px]">
+      <Eyebrow>Add a video by hand</Eyebrow>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3.5">
+        <div className="min-w-[190px] flex-[1_1_240px]">
+          <div className="text-[12px] text-quiet">Video file</div>
+          <div className="mt-[3px] truncate text-row font-semibold text-paper">
+            {source?.sourceFileName ?? 'Nothing chosen yet'}
+          </div>
+          <div className="mt-1 machine text-caption text-muted">
+            {source
+              ? `${formatBytes(source.fileSizeBytes)} · ${formatClock(source.durationSeconds ?? 0)}`
+              : 'Pick a file that never made it into the watch folder.'}
+          </div>
         </div>
-        <StatusBadge tone={source ? 'active' : 'neutral'}>
-          {source ? selectedRoute.label : 'Idle'}
-        </StatusBadge>
+        <GhostButton onClick={() => void handleChooseSource()} disabled={isChoosing || isSubmitting}>
+          {isChoosing ? 'Opening…' : source ? 'Change' : 'Choose a video'}
+        </GhostButton>
       </div>
 
-      <div className="space-y-4">
-        <button
-          type="button"
-          onClick={() => void handleChooseSource()}
-          disabled={isChoosing || isSubmitting}
-          className="flex w-full items-center justify-center rounded-control border px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 border-rule bg-ink-chip text-paper hover:bg-ink-panel"
-        >
-          {isChoosing ? 'Choosing...' : source ? 'Change File' : 'Choose File'}
-        </button>
+      <div className="mt-3.5">
+        <QuietNote>{plannedTreatment}</QuietNote>
+      </div>
 
-        {source && (
-          <div
-            className="rounded-control border p-4 text-sm border-rule bg-ink"
-          >
-            <div className="min-w-0">
-              <p className="truncate font-medium text-paper">
-                {source.sourceFileName}
-              </p>
-              <p className="mt-1 text-muted">
-                {formatBytes(source.fileSizeBytes)}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-          {routeOptions.map((option) => {
-            const isSelected = option.id === route;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setRoute(option.id)}
-                disabled={isSubmitting}
-                className={`rounded-control border px-3 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                  isSelected
-                    ? 'border-accent/50 bg-accent/[.16] text-accent-hi'
-                    : 'border-rule bg-ink-chip text-body hover:bg-ink-panel'
-                }`}
-              >
-                <span className="block text-sm font-semibold">{option.label}</span>
-                <span className="mt-1 block text-xs opacity-75">{option.detail}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">
-              Title
-            </span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">
-              Project
-            </span>
-            <input
-              value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">
-              Event
-            </span>
-            <input
-              value={eventName}
-              onChange={(event) => setEventName(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">
-              Tags
-            </span>
-            <input
-              value={tagsInput}
-              onChange={(event) => setTagsInput(event.target.value)}
-              className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
-            />
-          </label>
-        </div>
-
+      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3.5">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">
-            Playlists
-          </span>
+          <span className="csn-label">Title</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className="csn-input"
+          />
+        </label>
+        <label className="block">
+          <span className="csn-label">Project</span>
+          <input
+            value={projectName}
+            onChange={(event) => setProjectName(event.target.value)}
+            className="csn-input"
+          />
+        </label>
+        <label className="block">
+          <span className="csn-label">Event</span>
+          <input
+            value={eventName}
+            onChange={(event) => setEventName(event.target.value)}
+            className="csn-input"
+          />
+        </label>
+        <label className="block">
+          <span className="csn-label">Tags</span>
+          <input
+            value={tagsInput}
+            onChange={(event) => setTagsInput(event.target.value)}
+            placeholder="baseball, full-game"
+            className="csn-input"
+          />
+        </label>
+        <label className="block">
+          <span className="csn-label">Playlists</span>
           <input
             value={playlistInput}
             onChange={(event) => setPlaylistInput(event.target.value)}
-            className="w-full rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
+            placeholder="2026 Season"
+            className="csn-input"
           />
         </label>
+      </div>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">
-            Description
-          </span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-control border px-3 py-2 text-sm outline-none transition focus:border-accent-hi border-rule bg-ink text-paper"
-          />
-        </label>
+      <label className="mt-3.5 block">
+        <span className="csn-label">Description</span>
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          rows={3}
+          className="csn-textarea resize-none"
+        />
+      </label>
 
-        {localError && (
-          <div className="rounded-control border border-state-danger/30 p-3 text-sm bg-state-danger/[.12] text-state-danger">
-            {localError}
-          </div>
-        )}
+      {localError ? (
+        <div className="mt-3.5">
+          <ErrorNote>{localError}</ErrorNote>
+        </div>
+      ) : null}
+      {successMessage ? (
+        <div className="mt-3.5">
+          <QuietNote>{successMessage}</QuietNote>
+        </div>
+      ) : null}
 
-        {successMessage && (
-          <div className="rounded-control border border-state-ok/30 p-3 text-sm bg-state-ok/[.13] text-state-ok">
-            {successMessage}
-          </div>
-        )}
-
-        <button
-          type="button"
+      <div className="mt-4 flex flex-wrap gap-[9px]">
+        <GhostButton
           onClick={() => void handleSubmit()}
           disabled={!source || isSubmitting || isChoosing}
-          className="w-full rounded-control bg-accent px-4 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? 'Sending...' : 'Send to Queue'}
-        </button>
+          {isSubmitting ? 'Adding…' : 'Add to the queue'}
+        </GhostButton>
       </div>
-    </GlassCard>
+    </div>
   );
 }

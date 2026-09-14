@@ -1,6 +1,6 @@
 # CSN Media Bridge
 
-CSN Media Bridge is a cross-platform Electron desktop app for automated sports media ingest and operator-facing VOD management. It watches a folder for new video files, waits until each file is stable, automatically routes short-form clips to progressive playback and longer content to CMAF-compatible HLS/DASH playback, uploads the source and distribution assets with `rclone`, and then registers the finished playback metadata with Convex. It also includes a Convex-backed library for search, metadata editing, publish control, and poster replacement, plus a manual Offload page for post-shoot folder handoff, local package creation on a designated drive, checksum-tracked `webp` image generation, and optional Backblaze B2 upload for still-image assets only.
+CSN Media Bridge is a cross-platform Tauri desktop app for automated sports media ingest and operator-facing VOD management. It watches a folder for new video files, waits until each file is stable, automatically routes short-form clips to progressive playback and longer content to CMAF-compatible HLS/DASH playback, uploads the source and distribution assets with `rclone`, and then registers the finished playback metadata with Convex. It also includes a Convex-backed library for search, metadata editing, publish control, and poster replacement, plus a manual Offload page for post-shoot folder handoff, local package creation on a designated drive, checksum-tracked `webp` image generation, and optional Backblaze B2 upload for still-image assets only.
 
 ## Documentation
 
@@ -50,24 +50,16 @@ The `/player` route now acts as a VOD library and management surface instead of 
 
 ## Stack
 
-- Electron + React + Tailwind CSS
+- Tauri (Rust host) + React + Tailwind CSS
 - `pnpm` for install and script execution
-- `fluent-ffmpeg` for FFmpeg orchestration
-- `chokidar` for ingest-folder monitoring
-- `electron-store` for persisted settings
-- Convex HTTP client support via the current official `convex` package
+- The Rust host in `src-tauri/src/lib.rs` drives FFmpeg, rclone and Convex directly
+- Settings persist as JSON under the OS application-support directory
 
-## Bootstrap
+The renderer in `src/` talks to the host through `window.mediaBridge`, which
+`src/tauriBridge.ts` maps onto Tauri commands. Nothing in the renderer knows
+which host it is running on.
 
-To start from the same scaffold this project expects:
-
-```bash
-pnpm dlx @quick-s/electron-app csn-media-bridge
-cd csn-media-bridge
-pnpm install
-```
-
-Then install the project dependencies and start the app:
+## Running it
 
 ```bash
 pnpm install
@@ -78,14 +70,41 @@ For packaging:
 
 ```bash
 pnpm run build
-pnpm run make
 ```
 
-To generate updater-ready release metadata for hosted desktop updates, package with an update base URL:
+`pnpm run build` produces installers under `src-tauri/target/release/bundle/`.
+
+## Sign-in
+
+The app has two identities: the **station**, which holds a machine credential
+and runs the pipeline unattended, and the **operator**, a Clerk user whose team
+decides what they can see in the window. Ingest keeps running while nobody is
+signed in — that is deliberate on a node meant to run overnight.
+
+Signing in happens in the operator's real browser over OAuth 2.0 with PKCE and
+a loopback redirect — Google and most providers refuse OAuth from an embedded
+webview, and the tokens stay in the host rather than in webview storage.
+
+It is off unless the station has an issuer and a client id, set either at build
+time or per station under Settings → advanced → Sign-in:
 
 ```bash
-APP_UPDATE_BASE_URL=https://downloads.example.com/csn-media-bridge pnpm run make
+CLERK_OAUTH_ISSUER=https://accounts.example.com \
+CLERK_OAUTH_CLIENT_ID=your_client_id \
+pnpm run build
 ```
+
+See [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md) for the model, why
+playback is still served from a public bucket, and what signing in does **not**
+protect.
+
+## Storage credentials
+
+A station can hold the master B2 and R2 keys, or it can fetch short-lived scoped
+ones from the broker in [`worker/`](worker/README.md) — set under Settings →
+advanced → Storage credentials. With a broker configured, a leaked station is
+write access to one prefix for a few hours rather than delete access to
+everything. Stations fall back to their local keys if the broker is unreachable.
 
 ## System Requirements
 
@@ -94,6 +113,18 @@ The app expects these CLIs to be available on your system `PATH`:
 - `ffmpeg`
 - `ffprobe`
 - `rclone`
+
+Packaged Tauri builds resolve these tools from the current `PATH`, common macOS
+install paths such as `/opt/homebrew/bin` and `/usr/local/bin`, or explicit
+environment overrides:
+
+- `CSN_FFMPEG_PATH`
+- `CSN_FFPROBE_PATH`
+- `CSN_RCLONE_PATH`
+
+If a GUI-launched build reports `Could not start ffprobe` even though your
+terminal can run it, install this packaged build or set the matching override to
+the absolute binary path.
 
 ## Platform Encoder Behavior
 
@@ -133,7 +164,7 @@ Set these values in the app Settings screen:
 - Optional hardware encoder override
 - Auto progressive threshold in seconds
 
-The app stores settings with `electron-store` and encrypts secret fields with Electron safe storage when the OS supports it.
+Settings are written as JSON to the OS application-support directory, readable only by the signed-in user account.
 
 ## App Updates
 
@@ -141,15 +172,23 @@ The desktop app can check for new packaged releases and present the appropriate 
 
 - The app reads an update feed base URL from Settings.
 - At runtime it checks `.../darwin/arm64/RELEASES.json` on macOS arm64 and `.../win32/x64/RELEASES` on Windows x64.
-- On Windows, the app uses the native Electron / Squirrel updater flow.
-- On macOS, the app checks for newer builds and opens the hosted download. Users may still need to approve the app in `Privacy & Security` after replacing it.
-- Existing installs need one manual upgrade to a version that includes the updater. After that, future builds can be discovered in-app.
+- The app reads an update feed base URL from Settings and polls
+  `{baseUrl}/latest.json` on launch and on the configured interval.
+- The feed is an operator setting rather than a build-time constant, so a
+  station can be pointed at a different release host without a rebuild.
+- Updates install in place on both platforms and the app restarts into the new
+  version.
+- Every artifact is signed, and Tauri verifies that signature before it writes
+  anything. An unsigned or tampered artifact is refused, which is what makes
+  this safe even though the macOS bundle itself is not notarized.
 
-When you build a release with `APP_UPDATE_BASE_URL` set, Electron Forge will generate the macOS update manifest alongside the zip artifact so you can upload both to your release host.
+Releases need a signing key — see [`docs/RELEASING.md`](docs/RELEASING.md).
 
 For release-host setup and the current Windows/macOS update policy, see [`docs/RELEASING.md`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/docs/RELEASING.md) and [`.env.release.example`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.env.release.example).
 
-The repo also includes a tag-driven GitHub Actions release workflow at [release.yml](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.github/workflows/release.yml) that is designed to publish GitHub Releases and deploy the updater feed to GitHub Pages.
+The repo includes a tag-driven GitHub Actions release workflow at
+[release.yml](.github/workflows/release.yml) that builds the macOS and Windows
+bundles and attaches the installers to a GitHub Release.
 
 ## Pipeline Overview
 

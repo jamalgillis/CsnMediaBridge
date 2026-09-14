@@ -34,8 +34,11 @@ export const IPC_CHANNELS = {
   pauseOffloadTask: 'media-bridge:pause-offload-task',
   cancelOffloadTask: 'media-bridge:cancel-offload-task',
   offloadUpdated: 'media-bridge:offload-updated',
+  authUpdated: 'media-bridge:auth-updated',
   getStorageUsage: 'media-bridge:get-storage-usage',
   listLiveStreamHandoffJobs: 'media-bridge:list-live-stream-handoff-jobs',
   wakeLiveStreamHandoffWorker: 'media-bridge:wake-live-stream-handoff-worker',
+  convertLiveStreamRecording: 'media-bridge:convert-live-stream-recording',
+  streamTransfersUpdated: 'media-bridge:stream-transfers-updated',
   liveStreamHandoffUpdated: 'media-bridge:live-stream-handoff-updated',
 } as const;

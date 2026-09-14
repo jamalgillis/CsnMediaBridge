@@ -15,7 +15,7 @@
  * data/config/colors.js for the palette.
  *
  * The faces are the site's own woff2 files, copied from `csn/ds-bundle/fonts`,
- * because a packaged Electron app cannot reach the Google Fonts CDN offline.
+ * because a packaged desktop app cannot reach the Google Fonts CDN offline.
  */
 
 @layer base {
@@ -48,27 +48,27 @@
   }
 
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
 
   ::-webkit-scrollbar-track {
-    background: transparent;
+    background: #0b0b0b;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #2a2a2a;
-    border-radius: 8px;
+    background: #252525;
+    border-radius: 2px;
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: #2a2a2a transparent;
+    scrollbar-color: #252525 #0b0b0b;
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: #5a5a5a;
+    color: #6b6b6b;
   }
 
   select {
@@ -107,12 +107,13 @@
 
 @layer components {
   /* ---------- Buttons ---------- */
-  /* Actions carry the site's button voice: uppercase, bold, letter-spaced,
-     squared to 4px. Only the primary one is filled with the accent. */
+  /* CSN v2 is a squared-off system: actions round to 2px and carry the
+     condensed uppercase label voice. Only one button in the palette is filled,
+     and it is filled with the accent. */
   .csn-btn {
     @apply inline-flex h-control flex-none cursor-pointer items-center justify-center gap-[7px]
-      rounded-[4px] px-4 text-[13px] font-bold uppercase tracking-[.06em] transition-colors
-      disabled:cursor-not-allowed disabled:opacity-50;
+      rounded-control px-4 font-condensed text-[13px] font-bold uppercase tracking-[.1em]
+      transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .csn-btn-primary {
@@ -126,58 +127,63 @@
 
   .csn-btn-ghost {
     @apply csn-btn border border-transparent bg-transparent text-muted
-      hover:bg-white/[.06] hover:text-paper;
+      hover:bg-ink-chip hover:text-paper;
   }
 
-  /* Outlined capsule — the site's GhostButton ("Open feed", "All shows"). */
+  /* The DS's own GhostButton, verbatim — the one capsule left in the system,
+     and the button the Bridge screens are drawn with. */
   .csn-btn-capsule {
-    @apply inline-flex flex-none cursor-pointer items-center gap-1.5 rounded-full border
-      border-rule-strong px-3.5 py-2 text-xs font-bold uppercase tracking-[.08em] text-paper
-      transition-colors hover:border-accent hover:text-accent
+    @apply inline-flex flex-none cursor-pointer items-center justify-center gap-1.5 rounded-full
+      border border-rule-strong px-3.5 py-2 text-xs font-bold uppercase tracking-[.08em]
+      text-paper transition-colors hover:border-accent hover:text-accent
       disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /* Confirming action (export, publish, install update). Green reads as "done"
-     in the queue, but it is never a filled block — the only filled button in
-     this palette is the accent one, as on the site. */
+  /* Confirming action (export, publish, install update). CSN has no green, so
+     "good" resolves to the neutral ladder — grey means it's fine, red means
+     look at this. */
   .csn-btn-accent {
-    @apply inline-flex h-control flex-none cursor-pointer items-center justify-center gap-1.5
-      rounded-[4px] bg-transparent px-[13px] text-[13px] font-bold uppercase tracking-[.06em]
-      text-state-ok shadow-[inset_0_0_0_1px_theme(colors.state.ok/40%)] transition-colors
-      hover:bg-state-ok/10 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply csn-btn bg-transparent text-soft shadow-[inset_0_0_0_1px_var(--rule-strong)]
+      hover:bg-ink-chip hover:text-paper;
   }
 
   .csn-btn-danger {
-    @apply csn-btn border border-state-danger/40 bg-state-danger/[.12] text-state-danger
-      hover:bg-state-danger/20;
+    @apply csn-btn bg-ink text-accent shadow-live hover:bg-accent/[.12];
   }
 
   .csn-icon-btn {
     @apply flex h-control w-control flex-none cursor-pointer items-center justify-center
-      rounded-[4px] text-muted shadow-[inset_0_0_0_1px_var(--rule-strong)] transition-colors
+      rounded-control text-muted shadow-[inset_0_0_0_1px_var(--rule-strong)] transition-colors
       hover:text-paper hover:shadow-[inset_0_0_0_1px_theme(colors.accent.DEFAULT)]
       disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* Small inline action square, used on card footers and list rows. */
   .csn-quiet-btn {
-    @apply flex flex-none cursor-pointer items-center justify-center rounded-[4px] border-none
-      bg-white/[.05] text-muted transition-colors hover:bg-accent/20 hover:text-accent-hi;
+    @apply flex flex-none cursor-pointer items-center justify-center rounded-control border-none
+      bg-ink-chip text-muted transition-colors hover:bg-accent/20 hover:text-accent-hi;
+  }
+
+  /* The plain "Show technical details" affordance. Machine vocabulary is always
+     present and never first — see design.md §4. */
+  .csn-disclosure {
+    @apply cursor-pointer border-none bg-transparent p-0 text-left text-[13px] text-muted
+      underline transition-colors hover:text-body;
   }
 
   /* ---------- Chips & tabs ---------- */
-  /* The site's FilterChip: a round-bordered capsule that goes red when on. */
+  /* The DS FilterChip: a round-bordered capsule that goes accent when on. */
   .csn-chip {
     @apply cursor-pointer whitespace-nowrap rounded-full border px-[13px] py-[7px] text-xs
-      font-bold uppercase tracking-[.05em] transition-colors;
+      font-bold uppercase tracking-[.05em] transition-colors hover:border-accent;
   }
 
   .csn-chip-off {
-    @apply csn-chip border-rule-strong text-muted hover:border-accent hover:text-paper;
+    @apply csn-chip border-rule-strong text-muted;
   }
 
   .csn-chip-on {
-    @apply csn-chip border-accent bg-accent/[.12] text-paper;
+    @apply csn-chip border-accent text-paper;
   }
 
   /* UnderlineTabs: condensed uppercase, active marked by an inset accent rule. */
@@ -192,17 +198,18 @@
   }
 
   /* ---------- Surfaces ---------- */
-  /* Site cards are hairline-ruled panels, not floating glass. */
+  /* Cards are hairline-ruled panels on the panel surface, squared to 3px. */
   .csn-card {
-    @apply rounded-card border border-rule bg-ink-panel;
+    @apply rounded-card border border-rule bg-ink-raised;
   }
 
   .csn-panel {
-    @apply rounded-card border border-rule bg-ink-panel p-5;
+    @apply rounded-card border border-rule bg-ink-raised p-5;
   }
 
+  /* Log wells and nested fact tables sit a step darker than the card. */
   .csn-well {
-    @apply rounded-card border border-rule-soft bg-ink-raised;
+    @apply rounded-card border border-rule bg-ink-panel;
   }
 
   .csn-pop {
@@ -214,29 +221,47 @@
     @apply h-6 w-px flex-none bg-[var(--rule)];
   }
 
+  /* The workhorse list: rows on the panel surface separated by 1px hairline
+     gaps inside a bordered, clipped container — folders, logs, settings,
+     publish destinations. See design.md §2, "Hairline list". */
+  .csn-hair {
+    @apply flex flex-col gap-px overflow-hidden rounded-card border border-rule
+      bg-[var(--rule-soft)];
+  }
+
+  .csn-hair-row {
+    @apply bg-ink-raised;
+  }
+
+  /* A hairline list nested inside a card drops to the darker ground so the two
+     surfaces stay legible against each other. */
+  .csn-hair-sunk > .csn-hair-row {
+    @apply bg-ink-panel;
+  }
+
   /* ---------- Form fields ---------- */
   .csn-field {
-    @apply flex h-control w-full items-center gap-[9px] rounded-[4px] border border-rule
-      bg-ink-tile px-3 text-copy text-paper outline-none transition-colors
+    @apply flex h-control w-full items-center gap-[9px] rounded-control border border-rule
+      bg-ink-raised px-3 text-copy text-paper outline-none transition-colors
       focus-within:border-accent;
   }
 
   .csn-input {
-    @apply h-control w-full rounded-[4px] border border-rule bg-ink-tile px-3 text-copy
-      text-paper outline-none transition-colors placeholder:text-faint focus:border-accent
+    @apply h-control w-full rounded-control border border-rule bg-ink-raised px-3 text-copy
+      text-paper outline-none transition-colors placeholder:text-muted focus:border-accent
       disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .csn-textarea {
-    @apply w-full rounded-[4px] border border-rule bg-ink-tile px-3 py-2.5 text-copy
-      leading-relaxed text-paper outline-none transition-colors placeholder:text-faint
+    @apply w-full rounded-control border border-rule bg-ink-raised px-3 py-2.5 text-copy
+      leading-relaxed text-paper outline-none transition-colors placeholder:text-muted
       focus:border-accent;
   }
 
   .csn-select {
-    @apply h-control cursor-pointer rounded-[4px] border border-rule bg-ink-tile pl-3.5 pr-8
+    @apply h-control cursor-pointer rounded-control border border-rule bg-ink-raised pl-3.5 pr-8
       text-control text-body outline-none transition-colors focus:border-accent;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%236B6B6B' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%238C8C8C' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 11px center;
   }
@@ -247,68 +272,90 @@
 
   /* Keyboard hint / unit suffix, e.g. ⌘K */
   .csn-kbd {
-    @apply flex-none rounded-[3px] border border-rule-strong px-[5px] py-px text-micro
-      font-bold text-dim;
+    @apply flex-none rounded-badge border border-rule-strong px-[5px] py-px text-micro
+      font-bold text-muted;
+  }
+
+  /* 38×22 squared toggle: paper track when on, with an inverted ink knob. */
+  .csn-toggle {
+    @apply relative h-[22px] w-[38px] flex-none cursor-pointer rounded-chip
+      transition-colors;
+  }
+
+  .csn-toggle-knob {
+    @apply absolute top-[2px] h-[18px] w-[18px] rounded-chip transition-[left];
   }
 
   /* ---------- Status ---------- */
-  /* The site's micro badge: 10px, bold, wide-tracked, squared to 3px. */
+  /* The status chip: condensed, 11px, 700, .1em, uppercase, squared to 2px.
+     Inert states sit on the tile surface; live states sit on ink inside an
+     inset accent ring. CSN has no green and no amber — success and warning both
+     resolve to the neutral ladder, because red means "look at this" and grey
+     means "it's fine". See design.md §1. */
   .csn-status {
-    @apply inline-flex flex-none items-center gap-1.5 rounded-badge px-2 py-[3px] text-[10px]
-      font-bold uppercase tracking-[.1em];
+    @apply inline-flex flex-none items-center gap-1.5 rounded-badge px-[9px] py-[4px]
+      font-condensed text-[11px] font-bold uppercase tracking-[.1em];
   }
 
+  /* Ready / Posted — the neutral "good". */
   .csn-status-ready {
-    @apply csn-status bg-state-ok/[.16] text-state-ok;
+    @apply csn-status bg-ink-chip text-soft;
   }
 
+  /* Rendering / Converting — live, so it takes the accent ring. */
   .csn-status-processing {
-    @apply csn-status bg-state-warn/[.16] text-state-warn;
+    @apply csn-status bg-ink text-accent shadow-live;
   }
 
   .csn-status-draft {
-    @apply csn-status bg-white/[.08] text-muted;
+    @apply csn-status bg-ink-chip text-muted;
   }
 
+  /* Uploading / Scheduled — in flight but not asking for attention. */
   .csn-status-published {
-    @apply csn-status bg-accent text-paper;
+    @apply csn-status bg-ink-chip text-paper;
   }
 
   .csn-status-failed {
-    @apply csn-status bg-state-danger/[.16] text-state-danger;
+    @apply csn-status bg-ink text-accent shadow-live;
+  }
+
+  /* Waiting its turn — inert, but not yet finished with. */
+  .csn-status-waiting {
+    @apply csn-status bg-ink-chip text-body;
   }
 
   /* Bordered variant used standalone (outside a thumbnail overlay). */
   .csn-pill {
     @apply inline-flex flex-none items-center gap-1.5 rounded-badge border px-[7px] py-[3px]
-      text-[10px] font-bold uppercase tracking-[.1em];
+      font-condensed text-[10px] font-bold uppercase tracking-[.1em];
   }
 
   .csn-badge-count {
-    @apply flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-full
+    @apply flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-chip
       bg-accent px-[5px] text-[10px] font-bold tabular-nums text-paper;
   }
 
   .csn-tag {
-    @apply flex-none rounded-badge border border-rule-strong px-1.5 py-0.5 font-condensed
-      text-[10px] font-bold uppercase tracking-[.12em] text-dim;
+    @apply flex-none rounded-badge bg-ink-chip px-[11px] py-[5px] text-caption text-body;
   }
 
   /* ---------- Sidebar nav ---------- */
-  /* The site marks the current section with an inset accent rule and white
-     type; everything else is muted. The rail does the same, vertically. */
+  /* Bridge speaks to an operator, not a pipeline engineer: its rail is set in
+     sentence-case sans rather than the site's condensed shout, and the current
+     item is a filled tile with a hairline edge instead of an accent rule. */
   .csn-nav {
-    @apply flex w-full cursor-pointer items-center gap-[11px] rounded-[4px] px-2.5 py-2
-      text-left font-condensed text-[15px] font-bold uppercase tracking-[.09em] text-muted
-      transition-colors hover:bg-white/[.05] hover:text-paper;
+    @apply flex w-full cursor-pointer items-center gap-2.5 rounded-chip border border-transparent
+      px-[11px] py-2.5 text-left text-copy font-semibold text-quiet transition-colors
+      hover:bg-ink-chip;
   }
 
   .csn-nav-on {
-    @apply csn-nav bg-white/[.05] font-bold text-paper shadow-[inset_3px_0_0_0_theme(colors.accent.DEFAULT)];
+    @apply csn-nav border-rule-strong bg-ink-chip text-paper;
   }
 
   .csn-section-label {
-    @apply px-[11px] pb-2 pt-4 font-condensed text-overline uppercase text-dim;
+    @apply px-[11px] pb-2 pt-4 font-condensed text-overline uppercase text-muted;
   }
 
   /* ---------- Thumbnails ---------- */
@@ -320,24 +367,23 @@
 
   .csn-play {
     @apply absolute left-1/2 top-1/2 flex h-[42px] w-[42px] -translate-x-1/2 -translate-y-1/2
-      items-center justify-center rounded-full border border-white/[.28] bg-ink/[.45]
-      backdrop-blur-[7px];
+      items-center justify-center rounded-full bg-ink/[.66];
   }
 
   .csn-timecode {
-    @apply absolute bottom-2.5 right-2.5 rounded-[2px] bg-ink/80 px-1.5 py-[3px] text-[10px]
-      font-bold tabular-nums text-paper;
+    @apply absolute bottom-[7px] right-[7px] rounded-chip bg-ink/[.82] px-[7px] py-[2px]
+      font-condensed text-[11px] font-bold tabular-nums text-paper;
   }
 
   /* Kind badge (VOD / Short) on a thumbnail corner. */
   .csn-kind {
-    @apply rounded-[3px] bg-ink/[.78] px-2 py-[5px] text-[10px] font-bold uppercase
-      tracking-[.12em] text-mid;
+    @apply rounded-chip bg-ink/[.82] px-[7px] py-[3px] font-condensed text-[10px] font-bold
+      uppercase tracking-[.1em] text-mid;
   }
 
   .csn-kind-short {
-    @apply rounded-[3px] bg-accent px-2 py-[5px] text-[10px] font-bold uppercase
-      tracking-[.12em] text-paper;
+    @apply rounded-chip bg-paper px-[7px] py-[3px] font-condensed text-[10px] font-bold
+      uppercase tracking-[.1em] text-ink;
   }
 }
 
@@ -360,8 +406,17 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Every machine-produced value — timecodes, byte counts, paths, percentages,
+     attempt counters — is set condensed with tabular figures so it reads as
+     machine output and its digits don't jitter as they tick. Human text stays
+     in the sans face. See design.md §1. */
+  .machine {
+    font-family: 'Barlow Condensed', 'Barlow', sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+
   .csn-mono {
-    @apply text-count tabular-nums text-dim;
+    @apply machine text-count text-muted;
   }
 
   .no-scrollbar {
@@ -371,13 +426,23 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* The frameless window's drag region. Anything interactive inside the title
+     bar has to opt back out with `.no-drag`. */
+  .drag {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
 }
 
 /* ---------- Video players ---------- */
 
 .stored-video-player {
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 3px;
   background: #141414;
 }
 
@@ -388,7 +453,7 @@
   --plyr-video-control-color: #fbfef9;
   --plyr-video-control-color-hover: #fbfef9;
   --plyr-video-control-background-hover: rgba(238, 21, 24, 0.78);
-  --plyr-control-radius: 8px;
+  --plyr-control-radius: 2px;
   --plyr-menu-background: #1c1c1c;
   --plyr-menu-color: #fbfef9;
   --plyr-menu-border-color: rgba(255, 255, 255, 0.1);
@@ -396,7 +461,7 @@
   --plyr-tooltip-color: #fbfef9;
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .stored-video-player video,
@@ -409,7 +474,7 @@
 
 .stored-video-player .plyr--video .plyr__controls,
 .trim-video-player .plyr--video .plyr__controls {
-  border-radius: 8px;
+  border-radius: 3px;
   background: rgba(5, 5, 5, 0.82);
   backdrop-filter: blur(14px);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
@@ -449,6 +514,6 @@
 
 .trim-video-player {
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 3px;
   background: #141414;
 }

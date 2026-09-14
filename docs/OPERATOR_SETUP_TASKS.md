@@ -65,6 +65,41 @@ If the Asset Manager plays HLS or DASH from R2 in a browser, add a CORS policy
 allowing `GET` and `HEAD` from the Asset Manager origin. The desktop app proxies
 media through a local loopback server and is unaffected.
 
+Use the JSON tab in the bucket's CORS policy editor:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://centexsportsnetwork.com",
+      "https://www.centexsportsnetwork.com"
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range"],
+    "ExposeHeaders": [
+      "Accept-Ranges",
+      "Content-Length",
+      "Content-Range",
+      "ETag"
+    ],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+After saving the policy, purge the cache for the R2 custom domain if the bucket
+has already served the same objects. Verify with an origin-aware request:
+
+```bash
+curl -I \
+  -H "Origin: https://www.centexsportsnetwork.com" \
+  https://media.centexsportsnetwork.com/vod/hls/<asset-key>/master.m3u8
+```
+
+The response should include `access-control-allow-origin`. Without that header,
+browser players that fetch HLS or DASH with JavaScript can fail even when the
+manifest, init fragments, and media segments return `200`.
+
 ---
 
 ## 2. Backblaze B2

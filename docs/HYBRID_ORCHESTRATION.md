@@ -145,7 +145,7 @@ trims the event log.
 
 Settled: the Asset Manager is a destination inside the sports app's admin
 (`Websites/csn/apps/admin/app/assets`), and the sports app owns the Convex
-codebase. This Electron project is a client of it and contains no backend.
+codebase. This desktop project is a client of it and contains no backend.
 
 The consequence to keep in mind is release cadence. The admin app and the Convex
 functions deploy together; desktop builds ship to workstations and cannot be

@@ -1,27 +1,44 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import GlassCard from '../components/GlassCard';
-import StatusBadge from '../components/StatusBadge';
 import TrimVideoPlayer from '../components/TrimVideoPlayer';
+import {
+  Disclosure,
+  ErrorNote,
+  Fact,
+  FactList,
+  PageHeading,
+  QuietNote,
+  Screen,
+  Toast,
+  useToast,
+} from '../components/csn/bridge';
+import { EmptyState, Eyebrow, GhostButton } from '../components/csn/ui';
 import { useBridge } from '../context/BridgeContext';
+import { formatBytes, formatWhen } from '../lib/plain';
 import type { LocalTrimSourceSnapshot, TrimClipResult } from '../shared/types';
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
+/**
+ * Trim a clip.
+ *
+ * One band stands for the whole video: the lit stretch is the clip, the two
+ * white handles are its ends, and the accent marker is where the preview is
+ * sitting. Everything else — exact seconds, keyboard shortcuts, the written
+ * file — is behind the disclosure, because the operator's job here is to drag
+ * two handles and press export.
+ */
 
-  return String(error);
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function clampSeconds(value: number, duration: number) {
   if (!Number.isFinite(value)) {
     return 0;
   }
-
   return Math.min(duration, Math.max(0, value));
 }
 
+/** Timecode to the hundredth — the one place Bridge shows frame-level precision. */
 function formatTime(value: number) {
   if (!Number.isFinite(value) || value < 0) {
     return '0:00.00';
@@ -38,59 +55,42 @@ function formatTime(value: number) {
   if (hours > 0) {
     return `${hours}:${String(minutes).padStart(2, '0')}:${timecode}`;
   }
-
   return `${minutes}:${timecode}`;
-}
-
-function formatFileSize(value: number) {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 'Unknown size';
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let currentValue = value;
-  let unitIndex = 0;
-
-  while (currentValue >= 1024 && unitIndex < units.length - 1) {
-    currentValue /= 1024;
-    unitIndex += 1;
-  }
-
-  const precision = currentValue >= 100 || unitIndex === 0 ? 0 : 1;
-  return `${currentValue.toFixed(precision)} ${units[unitIndex]}`;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleString();
 }
 
 function getPercent(value: number, duration: number) {
   if (!Number.isFinite(value) || !Number.isFinite(duration) || duration <= 0) {
     return 0;
   }
-
   return Math.min(100, Math.max(0, (value / duration) * 100));
 }
+
+type Drag = 'in' | 'out' | 'head';
 
 export default function TrimmerPage() {
   const { state } = useBridge();
   const location = useLocation();
+  const { toast, flash } = useToast();
+
   // The library hands a retrieved archive master over through router state, so
-  // "Retrieve for Processing" lands the operator on a loaded timeline rather
-  // than on an empty page with a file picker.
+  // "Get original back" lands the operator on a loaded timeline rather than on
+  // an empty page with a file picker.
   const handedOverSource = (location.state as { source?: LocalTrimSourceSnapshot } | null)?.source;
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const bandRef = useRef<HTMLDivElement | null>(null);
+
   const [source, setSource] = useState<LocalTrimSourceSnapshot | null>(handedOverSource ?? null);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [currentTimeSeconds, setCurrentTimeSeconds] = useState(0);
   const [inPointSeconds, setInPointSeconds] = useState(0);
   const [outPointSeconds, setOutPointSeconds] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isPickingSource, setIsPickingSource] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [lastExport, setLastExport] = useState<TrimClipResult | null>(null);
+  const [dragging, setDragging] = useState<Drag | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const selectionDurationSeconds = Math.max(0, outPointSeconds - inPointSeconds);
   const hasValidSelection = Boolean(source) && selectionDurationSeconds >= 0.1;
@@ -103,6 +103,65 @@ export default function TrimmerPage() {
       setSource(handedOverSource);
     }
   }, [handedOverSource?.sourcePath]);
+
+  const jumpToTime = useCallback(
+    (nextTime: number) => {
+      const video = videoRef.current;
+      if (!video) {
+        return;
+      }
+      const safeTime = clampSeconds(nextTime, durationSeconds);
+      video.currentTime = safeTime;
+      setCurrentTimeSeconds(safeTime);
+    },
+    [durationSeconds],
+  );
+
+  /* ---- dragging the band ------------------------------------------------ */
+
+  const secondsAt = useCallback(
+    (clientX: number) => {
+      const element = bandRef.current;
+      if (!element || durationSeconds <= 0) {
+        return 0;
+      }
+      const rect = element.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return ratio * durationSeconds;
+    },
+    [durationSeconds],
+  );
+
+  useEffect(() => {
+    if (!dragging) {
+      return;
+    }
+
+    function onMove(event: MouseEvent) {
+      event.preventDefault();
+      const at = secondsAt(event.clientX);
+      if (dragging === 'in') {
+        setInPointSeconds(Math.min(at, outPointSeconds));
+      } else if (dragging === 'out') {
+        setOutPointSeconds(Math.max(at, inPointSeconds));
+      } else {
+        jumpToTime(at);
+      }
+    }
+
+    function onUp() {
+      setDragging(null);
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [dragging, inPointSeconds, outPointSeconds, secondsAt, jumpToTime]);
+
+  /* ---- keyboard --------------------------------------------------------- */
 
   useEffect(() => {
     if (!source) {
@@ -135,21 +194,13 @@ export default function TrimmerPage() {
 
       if (event.code === 'KeyI') {
         event.preventDefault();
-        const nextInPoint = clampSeconds(video.currentTime, durationSeconds);
-        setInPointSeconds(nextInPoint);
-        if (nextInPoint > outPointSeconds) {
-          setOutPointSeconds(nextInPoint);
-        }
+        handleMarkIn();
         return;
       }
 
       if (event.code === 'KeyO') {
         event.preventDefault();
-        const nextOutPoint = clampSeconds(video.currentTime, durationSeconds);
-        setOutPointSeconds(nextOutPoint);
-        if (nextOutPoint < inPointSeconds) {
-          setInPointSeconds(nextOutPoint);
-        }
+        handleMarkOut();
         return;
       }
 
@@ -160,34 +211,31 @@ export default function TrimmerPage() {
       event.preventDefault();
       const nudgeAmount = event.shiftKey ? 1 / 30 : 1;
       const direction = event.code === 'ArrowRight' ? 1 : -1;
-      const nextTime = clampSeconds(video.currentTime + direction * nudgeAmount, durationSeconds);
-      video.currentTime = nextTime;
-      setCurrentTimeSeconds(nextTime);
+      jumpToTime(video.currentTime + direction * nudgeAmount);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [durationSeconds, inPointSeconds, outPointSeconds, source]);
+  }, [durationSeconds, inPointSeconds, outPointSeconds, source, jumpToTime]);
+
+  /* ---- actions ---------------------------------------------------------- */
 
   async function handleChooseSource() {
     setIsPickingSource(true);
     setPageError(null);
-    setExportNotice(null);
 
     try {
       const nextSource = await window.mediaBridge.chooseTrimSource();
       if (!nextSource) {
         return;
       }
-
       setSource(nextSource);
       setDurationSeconds(0);
       setCurrentTimeSeconds(0);
       setInPointSeconds(0);
       setOutPointSeconds(0);
-      setIsPlaying(false);
       setLastExport(null);
     } catch (error) {
       setPageError(getErrorMessage(error));
@@ -196,40 +244,19 @@ export default function TrimmerPage() {
     }
   }
 
-  function jumpToTime(nextTime: number) {
-    const video = videoRef.current;
-    if (!video) {
-      return;
-    }
-
-    const safeTime = clampSeconds(nextTime, durationSeconds);
-    video.currentTime = safeTime;
-    setCurrentTimeSeconds(safeTime);
-  }
-
   function handleMarkIn() {
-    const video = videoRef.current;
-    if (!video) {
-      return;
-    }
-
-    const nextInPoint = clampSeconds(video.currentTime, durationSeconds);
-    setInPointSeconds(nextInPoint);
-    if (nextInPoint > outPointSeconds) {
-      setOutPointSeconds(nextInPoint);
+    const next = clampSeconds(videoRef.current?.currentTime ?? currentTimeSeconds, durationSeconds);
+    setInPointSeconds(next);
+    if (next > outPointSeconds) {
+      setOutPointSeconds(next);
     }
   }
 
   function handleMarkOut() {
-    const video = videoRef.current;
-    if (!video) {
-      return;
-    }
-
-    const nextOutPoint = clampSeconds(video.currentTime, durationSeconds);
-    setOutPointSeconds(nextOutPoint);
-    if (nextOutPoint < inPointSeconds) {
-      setInPointSeconds(nextOutPoint);
+    const next = clampSeconds(videoRef.current?.currentTime ?? currentTimeSeconds, durationSeconds);
+    setOutPointSeconds(next);
+    if (next < inPointSeconds) {
+      setInPointSeconds(next);
     }
   }
 
@@ -238,7 +265,6 @@ export default function TrimmerPage() {
     if (!video) {
       return;
     }
-
     const nextDuration = Number.isFinite(video.duration) ? video.duration : 0;
     setDurationSeconds(nextDuration);
     setCurrentTimeSeconds(video.currentTime);
@@ -263,22 +289,6 @@ export default function TrimmerPage() {
     setCurrentTimeSeconds(nextCurrentTime);
   }
 
-  function handleInPointChange(rawValue: number) {
-    const nextInPoint = clampSeconds(rawValue, durationSeconds);
-    setInPointSeconds(nextInPoint);
-    if (nextInPoint > outPointSeconds) {
-      setOutPointSeconds(nextInPoint);
-    }
-  }
-
-  function handleOutPointChange(rawValue: number) {
-    const nextOutPoint = clampSeconds(rawValue, durationSeconds);
-    setOutPointSeconds(nextOutPoint);
-    if (nextOutPoint < inPointSeconds) {
-      setInPointSeconds(nextOutPoint);
-    }
-  }
-
   async function handleExport() {
     if (!source || !hasValidSelection) {
       return;
@@ -286,7 +296,6 @@ export default function TrimmerPage() {
 
     setIsExporting(true);
     setPageError(null);
-    setExportNotice(null);
 
     try {
       const result = await window.mediaBridge.trimClip({
@@ -296,14 +305,7 @@ export default function TrimmerPage() {
       });
 
       setLastExport(result);
-      if (result.canceled) {
-        setExportNotice('Trim export canceled.');
-        return;
-      }
-
-      setExportNotice(
-        `Trim export finished in ${formatTime(result.durationSeconds ?? selectionDurationSeconds)} using ${result.effectiveEncoder}.`,
-      );
+      flash(result.canceled ? 'Export canceled' : 'Clip exported');
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -311,303 +313,212 @@ export default function TrimmerPage() {
     }
   }
 
+  const readouts = [
+    { label: 'Start', value: formatTime(inPointSeconds) },
+    { label: 'End', value: formatTime(outPointSeconds) },
+    { label: 'Clip length', value: formatTime(selectionDurationSeconds) },
+    { label: 'Marker', value: formatTime(currentTimeSeconds) },
+  ];
+
   return (
-    <div className="px-6 pb-11 pt-[22px]">
-      <div className="mb-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="font-display text-page text-paper">Trimmer</h1>
-            <p className="mt-1.5 text-copy text-muted">
-              Load a local MP4 or MOV file, scrub to your exact in and out points, then export a
-              trimmed MP4 for the next ingest step. The preview runs through the Electron main
-              process so the renderer can treat local files like normal streamable media.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge tone={state.system.ffmpegAvailable ? 'good' : 'warning'}>
-              {state.system.ffmpegAvailable ? 'FFmpeg Ready' : 'FFmpeg Missing'}
-            </StatusBadge>
-            <StatusBadge tone={isPlaying ? 'active' : 'neutral'}>
-              {isPlaying ? 'Playing' : 'Paused'}
-            </StatusBadge>
-            <button
-              onClick={() => void handleChooseSource()}
-              className="csn-btn-primary"
-              disabled={isPickingSource || isExporting}
-              type="button"
-            >
-              {isPickingSource ? 'Opening Browser...' : source ? 'Choose Another Clip' : 'Open Local Clip'}
-            </button>
-          </div>
-        </div>
-
-        {(exportNotice || pageError) && (
-          <div className="mt-4 space-y-2">
-            {exportNotice && (
-              <p className="text-copy text-state-ok">{exportNotice}</p>
-            )}
-            {pageError && <p className="text-copy text-state-danger">{pageError}</p>}
-          </div>
-        )}
+    <Screen label="Trim">
+      <div className="max-w-[840px] px-[30px] pt-[30px]">
+        <PageHeading
+          title="Trim a clip"
+          subhead="Cut a short clip out of a finished video. The work happens on this machine, so nothing is uploaded twice."
+        />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-12">
-        <GlassCard className="xl:col-span-8" padded={false}>
-          {source ? (
-            <>
+      {pageError ? (
+        <div className="max-w-[840px] px-[30px] pt-5">
+          <ErrorNote>{pageError}</ErrorNote>
+        </div>
+      ) : null}
+
+      {!state.system.ffmpegAvailable ? (
+        <div className="max-w-[840px] px-[30px] pt-5">
+          <QuietNote>
+            Exporting needs FFmpeg, which this machine can’t find yet. You can still scrub and set
+            the ends.
+          </QuietNote>
+        </div>
+      ) : null}
+
+      <div className="max-w-[840px] px-[30px] pt-6">
+        <div className="csn-card flex flex-wrap items-center gap-3.5 px-[18px] py-4">
+          <div className="min-w-[190px] flex-[1_1_240px]">
+            <div className="text-[12px] text-quiet">Trimming from</div>
+            <div className="mt-[3px] truncate text-row font-semibold text-paper">
+              {source?.sourceFileName ?? 'No video chosen yet'}
+            </div>
+            <div className="mt-1 machine text-caption text-muted">
+              {source
+                ? `${formatBytes(source.fileSizeBytes)} · ${formatTime(durationSeconds)} · modified ${formatWhen(source.modifiedAt)}`
+                : 'Pick a local MP4 or MOV, or open one from Videos.'}
+            </div>
+          </div>
+          <GhostButton
+            onClick={() => void handleChooseSource()}
+            disabled={isPickingSource || isExporting}
+          >
+            {isPickingSource ? 'Opening…' : source ? 'Change video' : 'Choose a video'}
+          </GhostButton>
+        </div>
+      </div>
+
+      {!source ? (
+        <div className="max-w-[840px] px-[30px] pt-6">
+          <EmptyState
+            title="Nothing loaded"
+            body="Choose a local video to start trimming. An MP4 plays back most reliably, and the export always writes a fresh MP4."
+          />
+        </div>
+      ) : (
+        <>
+          <div className="max-w-[840px] px-[30px] pt-5">
+            <div className="overflow-hidden rounded-card border border-rule bg-ink-panel">
               <TrimVideoPlayer
                 ref={videoRef}
                 onLoadedMetadata={handleLoadedMetadata}
-                onPause={() => setIsPlaying(false)}
-                onPlay={() => setIsPlaying(true)}
+                onPause={() => undefined}
+                onPlay={() => undefined}
                 onTimeUpdate={handleTimeUpdate}
                 sourceUrl={source.sourceUrl}
                 title={source.sourceFileName}
               />
-
-              <div className="space-y-5 p-6">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="font-condensed text-overline uppercase text-dim">
-                      Active Source
-                    </p>
-                    <h2 className="mt-2 font-display text-section text-paper">
-                      {source.sourceFileName}
-                    </h2>
-                    <p className="mt-2 break-all text-sm text-muted">
-                      {source.sourcePath}
-                    </p>
-                  </div>
-                  <StatusBadge tone="good">Local Preview</StatusBadge>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full px-3 py-1 font-condensed text-overline uppercase bg-ink-chip text-muted">
-                    {formatFileSize(source.fileSizeBytes)}
-                  </span>
-                  <span className="rounded-full px-3 py-1 font-condensed text-overline uppercase bg-ink-chip text-muted">
-                    Modified {formatDate(source.modifiedAt)}
-                  </span>
-                  <span className="rounded-full px-3 py-1 font-condensed text-overline uppercase bg-ink-chip text-muted">
-                    Source Duration {formatTime(durationSeconds)}
-                  </span>
-                </div>
-
-                <div className="space-y-3 rounded-control border p-4 border-rule bg-ink-panel">
-                  <div className="flex items-center justify-between font-condensed text-overline uppercase text-dim">
-                    <span>Trim Window</span>
-                    <span>Playhead {formatTime(currentTimeSeconds)}</span>
-                  </div>
-                  <div className="relative h-3 overflow-hidden rounded-full bg-ink-tile">
-                    <div
-                      className="absolute inset-y-0 rounded-full bg-state-ok/50"
-                      style={{
-                        left: `${selectionLeftPercent}%`,
-                        width: `${selectionWidthPercent}%`,
-                      }}
-                    />
-                    <div
-                      className="absolute top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-ink-panel shadow-[0_0_0_2px_rgba(15,23,42,0.4)]"
-                      style={{ left: `calc(${playheadPercent}% - 2px)` }}
-                    />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-control border p-3 border-rule bg-ink-chip">
-                      <p className="font-condensed text-overline uppercase text-dim">
-                        In
-                      </p>
-                      <p className="mt-2 font-display text-section text-paper">
-                        {formatTime(inPointSeconds)}
-                      </p>
-                    </div>
-                    <div className="rounded-control border p-3 border-rule bg-ink-chip">
-                      <p className="font-condensed text-overline uppercase text-dim">
-                        Out
-                      </p>
-                      <p className="mt-2 font-display text-section text-paper">
-                        {formatTime(outPointSeconds)}
-                      </p>
-                    </div>
-                    <div className="rounded-control border p-3 border-rule bg-ink-chip">
-                      <p className="font-condensed text-overline uppercase text-dim">
-                        Selection
-                      </p>
-                      <p className="mt-2 font-display text-section text-paper">
-                        {formatTime(selectionDurationSeconds)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="flex min-h-[32rem] flex-col items-center justify-center gap-4 p-10 text-center">
-              <div className="max-w-md">
-                <h2 className="font-display text-section text-paper">
-                  Load a local clip to start trimming
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-muted">
-                  Start with an MP4 when you can. Chromium-backed playback is happiest there, and
-                  the trim export will always write a fresh MP4 for the next stage of the workflow.
-                </p>
-              </div>
-              <button
-                onClick={() => void handleChooseSource()}
-                className="rounded-control bg-accent px-4 py-2 text-sm font-semibold text-paper transition hover:bg-accent-hi"
-                type="button"
-              >
-                Open Local Clip
-              </button>
             </div>
-          )}
-        </GlassCard>
 
-        <div className="space-y-6 xl:col-span-4">
-          <GlassCard>
-            <div className="space-y-4">
-              <div>
-                <h2 className="font-display text-section text-paper">Trim Controls</h2>
-                <p className="mt-1 text-sm text-muted">
-                  Mark the range, fine-tune the numbers, then export a clean MP4.
-                </p>
-              </div>
-
-              <div className="grid gap-3">
-                <button
-                  onClick={handleMarkIn}
-                  className="rounded-control border border-state-ok/30 bg-state-ok/[.13] px-4 py-3 text-left text-sm font-semibold transition hover:bg-state-ok/[.16] disabled:cursor-not-allowed disabled:opacity-60 text-state-ok"
-                  disabled={!source}
-                  type="button"
-                >
-                  Mark In at Playhead
-                </button>
-                <button
-                  onClick={handleMarkOut}
-                  className="rounded-control border border-accent/40 bg-accent/[.13] px-4 py-3 text-left text-sm font-semibold transition hover:bg-accent-hi/15 disabled:cursor-not-allowed disabled:opacity-60 text-accent-hi"
-                  disabled={!source}
-                  type="button"
-                >
-                  Mark Out at Playhead
-                </button>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-                <label className="space-y-1.5 text-control font-medium text-body">
-                  <span>In Point (seconds)</span>
-                  <input
-                    className="csn-input"
-                    disabled={!source}
-                    max={durationSeconds || undefined}
-                    min={0}
-                    onChange={(event) => handleInPointChange(event.target.valueAsNumber)}
-                    step="0.01"
-                    type="number"
-                    value={Number.isFinite(inPointSeconds) ? inPointSeconds : 0}
-                  />
-                </label>
-
-                <label className="space-y-1.5 text-control font-medium text-body">
-                  <span>Out Point (seconds)</span>
-                  <input
-                    className="csn-input"
-                    disabled={!source}
-                    max={durationSeconds || undefined}
-                    min={0}
-                    onChange={(event) => handleOutPointChange(event.target.valueAsNumber)}
-                    step="0.01"
-                    type="number"
-                    value={Number.isFinite(outPointSeconds) ? outPointSeconds : 0}
-                  />
-                </label>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  onClick={() => jumpToTime(inPointSeconds)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-state-ok/30 hover:bg-state-ok/5"
-                  disabled={!source}
-                  type="button"
-                >
-                  Jump to In
-                </button>
-                <button
-                  onClick={() => jumpToTime(outPointSeconds)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-accent-hi/30 hover:bg-accent/[.08]"
-                  disabled={!source}
-                  type="button"
-                >
-                  Jump to Out
-                </button>
-                <button
-                  onClick={() => jumpToTime(currentTimeSeconds - 1)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-white/[.22] hover:bg-ink-chip"
-                  disabled={!source}
-                  type="button"
-                >
-                  Nudge -1s
-                </button>
-                <button
-                  onClick={() => jumpToTime(currentTimeSeconds + 1)}
-                  className="rounded-control border px-4 py-2 text-sm font-semibold transition border-rule text-body hover:border-white/[.22] hover:bg-ink-chip"
-                  disabled={!source}
-                  type="button"
-                >
-                  Nudge +1s
-                </button>
-              </div>
-
-              <button
-                onClick={() => {
-                  setInPointSeconds(0);
-                  setOutPointSeconds(durationSeconds);
-                  jumpToTime(0);
+            {/* One band for the whole video: the lit stretch is the clip. */}
+            <div
+              ref={bandRef}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                jumpToTime(secondsAt(event.clientX));
+                setDragging('head');
+              }}
+              className="relative mt-[18px] h-11 cursor-pointer select-none overflow-hidden rounded-card border border-rule bg-ink-panel"
+            >
+              <div
+                className="absolute inset-y-0 bg-paper/10"
+                style={{ left: `${selectionLeftPercent}%`, width: `${selectionWidthPercent}%` }}
+              />
+              <div
+                className="absolute inset-y-0 w-0.5 bg-accent"
+                style={{ left: `${playheadPercent}%` }}
+              />
+              <div
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  setDragging('in');
                 }}
-                className="rounded-control border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 border-rule text-body hover:border-white/[.22] hover:bg-ink-chip"
-                disabled={!source}
-                type="button"
+                className="absolute inset-y-0 w-3 cursor-ew-resize"
+                style={{ left: `calc(${selectionLeftPercent}% - 6px)` }}
               >
-                Reset Selection
-              </button>
-
-              <button
-                onClick={() => void handleExport()}
-                className="rounded-control bg-accent px-4 py-3 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!hasValidSelection || isExporting || !state.system.ffmpegAvailable}
-                type="button"
+                <div className="mx-auto h-full w-[3px] bg-paper" />
+              </div>
+              <div
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  setDragging('out');
+                }}
+                className="absolute inset-y-0 w-3 cursor-ew-resize"
+                style={{
+                  left: `calc(${getPercent(outPointSeconds, durationSeconds)}% - 6px)`,
+                }}
               >
-                {isExporting ? 'Exporting Trim...' : 'Export Trimmed MP4'}
-              </button>
+                <div className="mx-auto h-full w-[3px] bg-paper" />
+              </div>
             </div>
-          </GlassCard>
 
-          <GlassCard>
-            <div className="space-y-4">
-              <div>
-                <h2 className="font-display text-section text-paper">Operator Notes</h2>
-                <p className="mt-1 text-sm text-muted">
-                  Keyboard shortcuts stay active as long as you are not focused in an input field.
-                </p>
-              </div>
+            <div className="mt-2.5 text-[12px] text-pretty text-muted">
+              Drag either white handle to change the clip. Click the bar to move the red marker,
+              then use Set start or Set end.
+            </div>
 
-              <div className="space-y-2 text-sm text-body">
-                <p><span className="font-semibold text-paper">Space</span> toggles playback.</p>
-                <p><span className="font-semibold text-paper">I</span> sets the in point.</p>
-                <p><span className="font-semibold text-paper">O</span> sets the out point.</p>
-                <p><span className="font-semibold text-paper">Left/Right</span> nudges by one second.</p>
-                <p><span className="font-semibold text-paper">Shift + Left/Right</span> nudges by one frame at 30 fps.</p>
-              </div>
-
-              {lastExport && !lastExport.canceled && lastExport.outputPath && (
-                <div className="rounded-control border border-state-ok/30 bg-state-ok/[.13] p-4 text-sm text-state-ok">
-                  <p className="font-semibold">Last Export</p>
-                  <p className="mt-2 break-all">{lastExport.outputPath}</p>
+            <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
+              {readouts.map((readout) => (
+                <div key={readout.label} className="flex-none rounded-chip bg-ink-chip px-[13px] py-2">
+                  <div className="font-condensed text-[10.5px] font-bold uppercase tracking-[.1em] text-muted">
+                    {readout.label}
+                  </div>
+                  <div className="mt-0.5 machine text-[15px] font-bold text-paper">
+                    {readout.value}
+                  </div>
                 </div>
-              )}
+              ))}
+              <span className="min-w-[8px] flex-1" />
+              <GhostButton onClick={handleMarkIn}>Set start</GhostButton>
+              <GhostButton onClick={handleMarkOut}>Set end</GhostButton>
             </div>
-          </GlassCard>
-        </div>
-      </div>
-    </div>
+          </div>
+
+          <div className="flex max-w-[840px] flex-wrap gap-2.5 px-[30px] pt-6">
+            <GhostButton
+              onClick={() => void handleExport()}
+              disabled={!hasValidSelection || isExporting || !state.system.ffmpegAvailable}
+            >
+              {isExporting ? 'Exporting…' : 'Export clip'}
+            </GhostButton>
+            <GhostButton
+              onClick={() => {
+                setInPointSeconds(0);
+                setOutPointSeconds(durationSeconds);
+                jumpToTime(0);
+              }}
+            >
+              Reset
+            </GhostButton>
+          </div>
+
+          <div className="max-w-[840px] px-[30px] pt-6">
+            <Disclosure open={detailsOpen} onToggle={() => setDetailsOpen((open) => !open)} />
+          </div>
+
+          {detailsOpen ? (
+            <div className="max-w-[840px] px-[30px] pt-3.5">
+              <Eyebrow>Keyboard</Eyebrow>
+              <div className="mt-2.5">
+                <FactList>
+                  <Fact wide label="Space" value="Play or pause" />
+                  <Fact wide label="I / O" value="Set the start or the end at the marker" />
+                  <Fact wide label="← / →" value="Move the marker one second" />
+                  <Fact wide label="Shift + ← / →" value="Move the marker one frame at 30 fps" />
+                </FactList>
+              </div>
+
+              <div className="mt-5">
+                <Eyebrow>This file</Eyebrow>
+                <div className="mt-2.5">
+                  <FactList>
+                    <Fact wide label="Source path" value={source.sourcePath} machine />
+                    <Fact
+                      wide
+                      label="Start / end"
+                      value={`${inPointSeconds.toFixed(2)}s → ${outPointSeconds.toFixed(2)}s`}
+                      machine
+                    />
+                    {lastExport && !lastExport.canceled && lastExport.outputPath ? (
+                      <>
+                        <Fact wide label="Last export" value={lastExport.outputPath} machine />
+                        <Fact
+                          wide
+                          label="Encoded with"
+                          value={lastExport.effectiveEncoder ?? '—'}
+                          machine
+                        />
+                      </>
+                    ) : null}
+                  </FactList>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+
+      <Toast message={toast} />
+    </Screen>
   );
 }

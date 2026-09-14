@@ -1,49 +1,82 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  Disclosure,
+  PageHeading,
+  QuietNote,
+  Screen,
+  Toast,
+  Toggle,
+  ToneChip,
+  useToast,
+} from '../components/csn/bridge';
+import { Eyebrow, GhostButton } from '../components/csn/ui';
+import { useAuth } from '../auth/AuthContext';
 import { useBridge } from '../context/BridgeContext';
 import type { AppSettings } from '../shared/types';
 
-function Label({ children }: { children: string }) {
-  return (
-    <span className="csn-label">{children}</span>
-  );
-}
+/**
+ * Settings.
+ *
+ * The essentials are here: the folders, how videos get encoded, what the app
+ * does on its own, and whether the cloud accounts are connected. Everything a
+ * pipeline engineer sets once — buckets, prefixes, keys, ready-check passes,
+ * the update feed — lives under one "Show advanced settings" disclosure, in the
+ * same hairline rows but in the machine voice. See design.md §4.
+ */
 
-function ToggleRow({
-  title,
-  description,
-  checked,
-  onChange,
+/** One essential row: a plain label and hint on the left, the control on the right. */
+function Row({
+  label,
+  hint,
+  children,
 }: {
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
+  label: string;
+  hint?: string;
+  children: ReactNode;
 }) {
   return (
-    <label
-      className="flex items-start gap-3 rounded-control border p-4 border-rule bg-ink"
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-4 w-4 rounded text-accent-hi focus:ring-accent-hi border-rule bg-transparent"
-      />
-      <span>
-        <span className="block font-medium text-paper">{title}</span>
-        <span className="mt-1 block text-sm text-muted">
-          {description}
-        </span>
-      </span>
-    </label>
+    <div className="csn-hair-row flex flex-wrap items-center gap-3.5 px-4 py-3.5">
+      <div className="min-w-[180px] flex-[1_1_240px]">
+        <div className="text-copy font-semibold text-paper">{label}</div>
+        {hint ? <div className="mt-[3px] text-caption text-pretty text-quiet">{hint}</div> : null}
+      </div>
+      <div className="flex flex-none items-center justify-end gap-2">{children}</div>
+    </div>
   );
 }
 
-const INPUT_CLASS = 'csn-input h-11';
+/** One advanced row: the machine's own name for a thing, and its value. */
+function FieldRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="csn-hair-row flex flex-wrap items-center gap-3.5 px-4 py-3">
+      <div className="min-w-[170px] flex-[1_1_220px] text-[13px] text-body">{label}</div>
+      <div className="flex w-[300px] max-w-full flex-none items-center gap-2">{children}</div>
+    </div>
+  );
+}
 
-const SELECT_CLASS = 'csn-select h-11 w-full text-copy text-paper';
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <Eyebrow>{title}</Eyebrow>
+      <div className="csn-hair mt-2.5">{children}</div>
+    </div>
+  );
+}
 
-const BROWSE_CLASS = 'csn-btn-secondary h-11 px-4';
+/** The right-hand slot's read-only form: values stay condensed and tabular. */
+function Value({ children }: { children: ReactNode }) {
+  return (
+    <span className="max-w-[250px] break-all text-right text-[13px] text-body">{children}</span>
+  );
+}
+
+const ENCODER_OPTIONS: { value: AppSettings['hardwareEncoderOverride']; label: string }[] = [
+  { value: 'auto', label: 'Automatic — let the app choose' },
+  { value: 'videotoolbox', label: 'Apple hardware (VideoToolbox)' },
+  { value: 'nvenc', label: 'NVIDIA hardware (NVENC)' },
+  { value: 'software', label: 'Software — slowest, best quality' },
+];
 
 export default function SettingsPage() {
   const {
@@ -55,18 +88,23 @@ export default function SettingsPage() {
     browseDirectory,
     isSavingSettings,
   } = useBridge();
+  const { toast, flash } = useToast();
+  const { status: authStatus, person, team, signOut } = useAuth();
+  const isAuthConfigured = authStatus !== 'unconfigured';
+
   const [draft, setDraft] = useState<AppSettings>(settings);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [expert, setExpert] = useState(false);
 
   useEffect(() => {
     setDraft(settings);
   }, [settings]);
 
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+
   async function browseInto(field: 'watchFolder' | 'tempOutputPath') {
     const selected = await browseDirectory();
     if (!selected) return;
     setDraft((current) => ({ ...current, [field]: selected }));
-    setNotice(null);
   }
 
   async function browseOffloadFolder() {
@@ -74,630 +112,666 @@ export default function SettingsPage() {
     if (!selected) return;
     setDraft((current) => ({
       ...current,
-      offload: {
-        ...current.offload,
-        localFolder: selected,
-      },
+      offload: { ...current.offload, localFolder: selected },
     }));
-    setNotice(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await saveSettings(draft);
-    setNotice('Settings saved and watcher state refreshed.');
+    flash('Settings saved');
   }
 
-  async function handleImportConnectionProfile() {
+  async function handleImport() {
     const result = await importConnectionProfile();
     if (result.canceled) {
-      setNotice('Connection profile import canceled.');
       return;
     }
-
     setDraft(result.settings);
-    setNotice(`Imported ${result.profileName ?? 'connection profile'}. Add machine secrets to finish setup.`);
+    flash(`Imported ${result.profileName ?? 'connection profile'}`);
   }
 
-  async function handleExportConnectionProfile() {
+  async function handleExport() {
     const result = await exportConnectionProfile('CSN Media Bridge Connection Profile');
-    if (result.canceled) {
-      setNotice('Connection profile export canceled.');
-      return;
+    if (!result.canceled) {
+      flash('Exported — secrets were left out');
     }
-
-    setNotice(`Exported ${result.profileName ?? 'connection profile'} without embedded secrets.`);
   }
 
-  const hasConnectionDefaults = Boolean(
-    draft.convex.deploymentUrl ||
-      draft.b2.bucket ||
-      draft.r2.bucket ||
-      draft.r2.publicBaseUrl,
+  const archiveConnected = Boolean(draft.b2.bucket && draft.b2.keyId && draft.b2.applicationKey);
+  const playbackConnected = Boolean(
+    draft.r2.bucket && draft.r2.accessKeyId && draft.r2.secretAccessKey,
   );
+  const libraryConnected = Boolean(draft.convex.deploymentUrl && draft.convex.nodeToken);
+
+  // One signed manifest lists every platform, so there is a single address to
+  // show rather than a path per platform.
+  const feedManifestUrl = draft.appUpdates.baseUrl.trim()
+    ? `${draft.appUpdates.baseUrl.trim().replace(/\/+$/, '')}/latest.json`
+    : 'nothing yet — set a feed address above';
 
   return (
-    <div className="px-6 pb-11 pt-[22px]">
-      <form onSubmit={(event) => void handleSubmit(event)} className="space-y-7">
-        <div>
-          <h1 className="font-display text-page text-paper">Settings</h1>
-          <p className="mt-1.5 max-w-2xl text-copy text-muted">
-            Configure the ingest paths, manual offload destinations, cloud targets, and Convex
-            mutation the desktop app uses after every successful encode or offload.
-          </p>
+    <Screen label="Settings">
+      <form onSubmit={(event) => void handleSubmit(event)}>
+        <div className="max-w-[700px] px-[30px] pt-[30px]">
+          <PageHeading
+            title="Settings"
+            subhead="The essentials are here. Everything else has a sensible default."
+          />
         </div>
 
-        <div className="rounded-control border p-5 border-rule bg-ink">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h2 className="font-display text-section text-paper">Team Connection Profile</h2>
-              <p className="mt-1.5 max-w-3xl text-copy text-muted">
-                Load shared backend coordinates in one step. Profiles include public buckets,
-                endpoints, path prefixes, update feeds, and Convex function paths; machine tokens
-                and storage access keys stay private to this workstation.
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void handleImportConnectionProfile()}
-                disabled={isSavingSettings}
-                className="csn-btn-secondary h-11 px-4"
-              >
-                Import Profile
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleExportConnectionProfile()}
-                className="csn-btn-secondary h-11 px-4"
-              >
-                Export Profile
-              </button>
-            </div>
-          </div>
+        <div className="flex max-w-[700px] flex-col gap-5 px-[30px] pt-6">
+          <Group title="Folders">
+            <Row
+              label="Watch this folder"
+              hint="New videos dropped here are picked up automatically."
+            >
+              <Value>{draft.watchFolder || 'Not set'}</Value>
+              <GhostButton onClick={() => void browseInto('watchFolder')}>Change</GhostButton>
+            </Row>
+            <Row label="Offload drive" hint="Where camera cards get copied.">
+              <Value>{draft.offload.localFolder || 'Not set'}</Value>
+              <GhostButton onClick={() => void browseOffloadFolder()}>Change</GhostButton>
+            </Row>
+          </Group>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-control border p-3 border-rule bg-ink-panel">
-              <p className="font-condensed text-overline uppercase text-muted">Backend</p>
-              <p className="mt-1 truncate text-sm text-paper">
-                {draft.convex.deploymentUrl || 'No Convex URL loaded'}
-              </p>
-            </div>
-            <div className="rounded-control border p-3 border-rule bg-ink-panel">
-              <p className="font-condensed text-overline uppercase text-muted">Archive</p>
-              <p className="mt-1 truncate text-sm text-paper">
-                {draft.b2.bucket || 'No B2 bucket loaded'}
-              </p>
-            </div>
-            <div className="rounded-control border p-3 border-rule bg-ink-panel">
-              <p className="font-condensed text-overline uppercase text-muted">Playback</p>
-              <p className="mt-1 truncate text-sm text-paper">
-                {draft.r2.bucket || draft.r2.publicBaseUrl || 'No R2 target loaded'}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-control border p-4 text-sm border-accent/40 bg-accent/[.13] text-accent-hi">
-            {hasConnectionDefaults
-              ? 'Connection defaults are loaded. Add this workstation’s node token and scoped storage keys below.'
-              : 'No team profile is loaded yet. Import one, or ship a build with CSN_* public defaults baked in.'}
-          </div>
-        </div>
-
-        <div className="grid gap-8 xl:grid-cols-2">
-          <div className="space-y-4">
-            <div>
-              <Label>Watch Folder</Label>
-              <div className="flex gap-2">
-                <input
-                  value={draft.watchFolder}
-                  onChange={(e) => setDraft({ ...draft, watchFolder: e.target.value })}
-                  className={INPUT_CLASS}
-                />
-                <button
-                  type="button"
-                  onClick={() => void browseInto('watchFolder')}
-                  className={BROWSE_CLASS}
-                >
-                  Browse
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <Label>Temp Output Folder</Label>
-              <div className="flex gap-2">
-                <input
-                  value={draft.tempOutputPath}
-                  onChange={(e) => setDraft({ ...draft, tempOutputPath: e.target.value })}
-                  className={INPUT_CLASS}
-                />
-                <button
-                  type="button"
-                  onClick={() => void browseInto('tempOutputPath')}
-                  className={BROWSE_CLASS}
-                >
-                  Browse
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <Label>Manual Offload Drive / Folder</Label>
-              <div className="flex gap-2">
-                <input
-                  value={draft.offload.localFolder}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      offload: { ...draft.offload, localFolder: e.target.value },
-                    })
-                  }
-                  className={INPUT_CLASS}
-                />
-                <button
-                  type="button"
-                  onClick={() => void browseOffloadFolder()}
-                  className={BROWSE_CLASS}
-                >
-                  Browse
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <Label>Offload Local Copy Mode</Label>
-              <select
-                value={draft.offload.localCopyMode}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    offload: {
-                      ...draft.offload,
-                      localCopyMode: e.target.value as AppSettings['offload']['localCopyMode'],
-                    },
-                  })
-                }
-                className={SELECT_CLASS}
-              >
-                <option value="fast">Fast Local Copy (recommended)</option>
-                <option value="safe">Safe Checksum Copy</option>
-              </select>
-              <p className="mt-2 text-sm text-muted">
-                {draft.offload.localCopyMode === 'fast'
-                  ? 'Uses clone-friendly local copies plus size and modified-time checks for much faster first-pass offloads. Resume, manifest, and log behavior still stay in place.'
-                  : 'Reads and verifies full-file checksums for each local original copy. This is slower, but it is the strictest local verification mode.'}
-              </p>
-            </div>
-
-            <div>
-              <Label>Hardware Encoder Override</Label>
+          <Group title="Quality">
+            <Row
+              label="How videos are encoded"
+              hint="Automatic suits most footage. Software is slowest but gives the best picture."
+            >
               <select
                 value={draft.hardwareEncoderOverride}
-                onChange={(e) =>
+                onChange={(event) =>
                   setDraft({
                     ...draft,
-                    hardwareEncoderOverride: e.target.value as AppSettings['hardwareEncoderOverride'],
+                    hardwareEncoderOverride: event.target
+                      .value as AppSettings['hardwareEncoderOverride'],
                   })
                 }
-                className={SELECT_CLASS}
+                className="csn-select max-w-[250px]"
               >
-                <option value="auto">Auto (platform default)</option>
-                <option value="nvenc">NVENC</option>
-                <option value="videotoolbox">VideoToolbox</option>
-                <option value="software">Software (libx264)</option>
+                {ENCODER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
-            </div>
+            </Row>
+            <Row
+              label="Make a thumbnail"
+              hint="Grabs a still from the video to use as its cover image."
+            >
+              <Toggle
+                label="Make a thumbnail"
+                checked={draft.extractPosterFrame}
+                onChange={(next) => setDraft({ ...draft, extractPosterFrame: next })}
+              />
+            </Row>
+            <Row
+              label="Make scrubbing previews"
+              hint="Small images along the progress bar, so you can find a moment without playing through it."
+            >
+              <Toggle
+                label="Make scrubbing previews"
+                checked={draft.generateScrubThumbnails}
+                onChange={(next) => setDraft({ ...draft, generateScrubThumbnails: next })}
+              />
+            </Row>
+          </Group>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Ready Check Interval (ms)</Label>
-                <input
-                  type="number"
-                  value={draft.readyCheckIntervalMs}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      readyCheckIntervalMs: Number(e.target.value) || draft.readyCheckIntervalMs,
-                    })
-                  }
-                  className={INPUT_CLASS}
-                />
+          <Group title="Behaviour">
+            <Row label="Start watching when the app opens">
+              <Toggle
+                label="Start watching when the app opens"
+                checked={draft.autoWatch}
+                onChange={(next) => setDraft({ ...draft, autoWatch: next })}
+              />
+            </Row>
+            <Row
+              label="Tidy up temporary files"
+              hint="Only after the video is safely uploaded."
+            >
+              <Toggle
+                label="Tidy up temporary files"
+                checked={draft.autoCleanupTempFiles}
+                onChange={(next) => setDraft({ ...draft, autoCleanupTempFiles: next })}
+              />
+            </Row>
+            <Row
+              label="Check every upload arrived"
+              hint="Reads the files back after they are sent, so nothing goes missing quietly."
+            >
+              <Toggle
+                label="Check every upload arrived"
+                checked={draft.verifyUploads}
+                onChange={(next) => setDraft({ ...draft, verifyUploads: next })}
+              />
+            </Row>
+            <Row
+              label="Keep going in software if the hardware encoder fails"
+              hint="Slower, but the video still gets made."
+            >
+              <Toggle
+                label="Keep going in software if the hardware encoder fails"
+                checked={draft.autoFallbackToSoftware}
+                onChange={(next) => setDraft({ ...draft, autoFallbackToSoftware: next })}
+              />
+            </Row>
+            <Row label="Notify me when a video finishes">
+              <Toggle
+                label="Notify me when a video finishes"
+                checked={draft.enableNotifications}
+                onChange={(next) => setDraft({ ...draft, enableNotifications: next })}
+              />
+            </Row>
+          </Group>
+
+          <Group title="Offloading a card">
+            <Row
+              label="Make web-friendly photo copies"
+              hint="Saves a smaller webp version of every photo next to the originals."
+            >
+              <Toggle
+                label="Make web-friendly photo copies"
+                checked={draft.offload.convertImagesToWebp}
+                onChange={(next) =>
+                  setDraft({ ...draft, offload: { ...draft.offload, convertImagesToWebp: next } })
+                }
+              />
+            </Row>
+            <Row
+              label="Send photos to the cloud"
+              hint="Uploads the photos only. Video always stays on the offload drive."
+            >
+              <Toggle
+                label="Send photos to the cloud"
+                checked={draft.offload.uploadImagesToCloud}
+                onChange={(next) =>
+                  setDraft({ ...draft, offload: { ...draft.offload, uploadImagesToCloud: next } })
+                }
+              />
+            </Row>
+          </Group>
+
+          <Group title="Team">
+            {isAuthConfigured ? (
+              <>
+                <Row label="Signed in as" hint={person?.email ?? undefined}>
+                  <Value>{authStatus === 'signed-in' ? (person?.name ?? '—') : 'Not signed in'}</Value>
+                </Row>
+                <Row label="Team" hint="Decides which videos this station shows you.">
+                  <Value>{team?.name ?? 'No team selected'}</Value>
+                </Row>
+
+                <Row
+                  label="Sign out"
+                  hint="Converting and uploading carry on while nobody is signed in."
+                >
+                  <GhostButton onClick={() => void signOut()}>Sign out</GhostButton>
+                </Row>
+              </>
+            ) : (
+              <div className="csn-hair-row px-4 py-3.5 text-[13px] text-pretty text-quiet">
+                This station has no sign-in. Anyone at this machine can use every screen. Set the
+                sign-in address and client id under advanced settings, or ship a build with them
+                baked in, to turn it on.
               </div>
-              <div>
-                <Label>Stable Passes</Label>
-                <input
-                  type="number"
-                  value={draft.readyCheckStablePasses}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      readyCheckStablePasses: Number(e.target.value) || draft.readyCheckStablePasses,
-                    })
-                  }
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <Label>Upload Concurrency</Label>
-                <input
-                  type="number"
-                  value={draft.uploadConcurrency}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      uploadConcurrency: Number(e.target.value) || draft.uploadConcurrency,
-                    })
-                  }
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <Label>Auto Progressive Threshold (seconds)</Label>
-                <input
-                  type="number"
-                  value={draft.autoProgressiveMaxDurationSeconds}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      autoProgressiveMaxDurationSeconds:
-                        Number(e.target.value) || draft.autoProgressiveMaxDurationSeconds,
-                    })
-                  }
-                  className={INPUT_CLASS}
-                />
-              </div>
-            </div>
+            )}
+          </Group>
+
+          <Group title="Cloud accounts">
+            <Row
+              label="Archive storage"
+              hint="Keeps the original camera file, permanently."
+            >
+              <ToneChip tone={archiveConnected ? 'neutral' : 'quiet'}>
+                {archiveConnected ? 'Connected' : 'Not set up'}
+              </ToneChip>
+            </Row>
+            <Row label="Playback storage" hint="Serves the video to viewers.">
+              <ToneChip tone={playbackConnected ? 'neutral' : 'quiet'}>
+                {playbackConnected ? 'Connected' : 'Not set up'}
+              </ToneChip>
+            </Row>
+            <Row label="Library database" hint="Where video records live.">
+              <ToneChip tone={libraryConnected ? 'neutral' : 'quiet'}>
+                {libraryConnected ? 'Connected' : 'Not set up'}
+              </ToneChip>
+            </Row>
+          </Group>
+
+          <div>
+            <Disclosure
+              open={expert}
+              onToggle={() => setExpert((open) => !open)}
+              showLabel="Show advanced settings"
+              hideLabel="Hide advanced settings"
+            />
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <Label>Storage Layout</Label>
-              <select
-                value={draft.storage.layout}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    storage: {
-                      ...draft.storage,
-                      layout: e.target.value as AppSettings['storage']['layout'],
-                    },
-                  })
-                }
-                className={SELECT_CLASS}
-              >
-                <option value="canonical">Canonical (lifecycle-aware)</option>
-                <option value="legacy">Legacy (flat path prefixes)</option>
-              </select>
-              <p className="mt-2 text-sm text-muted">
-                {draft.storage.layout === 'canonical'
-                  ? 'New ingests write masters/{project}/{date}/{assetKey}/ in B2 and streaming/vod/{assetKey}/ plus posters/{assetKey}/ in R2, so R2 lifecycle rules can expire social renders without touching published playback assets. Objects already uploaded stay exactly where they are.'
-                  : 'New ingests write the flat {path prefix}/{job folder}/ scheme used before the storage contract. R2 lifecycle rules cannot separate temporary social renders from permanent playback assets under this layout.'}
-              </p>
-            </div>
-            <div>
-              <Label>B2 Bucket</Label>
-              <input
-                value={draft.b2.bucket}
-                onChange={(e) => setDraft({ ...draft, b2: { ...draft.b2, bucket: e.target.value } })}
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>B2 Key ID</Label>
-              <input
-                value={draft.b2.keyId}
-                onChange={(e) => setDraft({ ...draft, b2: { ...draft.b2, keyId: e.target.value } })}
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>B2 Application Key</Label>
-              <input
-                type="password"
-                value={draft.b2.applicationKey}
-                onChange={(e) =>
-                  setDraft({ ...draft, b2: { ...draft.b2, applicationKey: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>B2 S3 Endpoint</Label>
-              <input
-                value={draft.b2.s3Endpoint}
-                onChange={(e) =>
-                  setDraft({ ...draft, b2: { ...draft.b2, s3Endpoint: e.target.value } })
-                }
-                placeholder="https://s3.us-west-004.backblazeb2.com"
-                className={INPUT_CLASS}
-              />
-              <p className="mt-2 text-sm text-muted">
-                Needed only to preview and retrieve archived masters from the library. Copy it
-                from your bucket&apos;s details page in Backblaze — the region is read from the
-                address. Uploads and downloads do not use this.
-              </p>
-            </div>
-            <div>
-              <Label>B2 Path Prefix</Label>
-              <input
-                value={draft.b2.pathPrefix}
-                onChange={(e) =>
-                  setDraft({ ...draft, b2: { ...draft.b2, pathPrefix: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-              {draft.storage.layout === 'canonical' ? (
-                <p className="mt-2 text-sm text-muted">
-                  Unused by the canonical layout. Kept so existing objects stay reachable if you
-                  switch back to legacy.
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <Label>Offload Image B2 Prefix</Label>
-              <input
-                value={draft.offload.b2PathPrefix}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    offload: { ...draft.offload, b2PathPrefix: e.target.value },
-                  })
-                }
-                className={INPUT_CLASS}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-8 xl:grid-cols-2">
-          <div className="space-y-4">
-            <div>
-              <Label>R2 Account ID</Label>
-              <input
-                value={draft.r2.accountId}
-                onChange={(e) =>
-                  setDraft({ ...draft, r2: { ...draft.r2, accountId: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>R2 Bucket</Label>
-              <input
-                value={draft.r2.bucket}
-                onChange={(e) => setDraft({ ...draft, r2: { ...draft.r2, bucket: e.target.value } })}
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>R2 Public Base URL</Label>
-              <input
-                value={draft.r2.publicBaseUrl}
-                onChange={(e) =>
-                  setDraft({ ...draft, r2: { ...draft.r2, publicBaseUrl: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>R2 Access Key ID</Label>
-              <input
-                value={draft.r2.accessKeyId}
-                onChange={(e) =>
-                  setDraft({ ...draft, r2: { ...draft.r2, accessKeyId: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>R2 Secret Access Key</Label>
-              <input
-                type="password"
-                value={draft.r2.secretAccessKey}
-                onChange={(e) =>
-                  setDraft({ ...draft, r2: { ...draft.r2, secretAccessKey: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>R2 Path Prefix</Label>
-              <input
-                value={draft.r2.pathPrefix}
-                onChange={(e) =>
-                  setDraft({ ...draft, r2: { ...draft.r2, pathPrefix: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-              {draft.storage.layout === 'canonical' ? (
-                <p className="mt-2 text-sm text-muted">
-                  Unused by the canonical layout. Kept so existing objects stay reachable if you
-                  switch back to legacy.
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <Label>Convex Deployment URL</Label>
-              <input
-                value={draft.convex.deploymentUrl}
-                onChange={(e) =>
-                  setDraft({ ...draft, convex: { ...draft.convex, deploymentUrl: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <Label>Convex Mutation Path</Label>
-              <input
-                value={draft.convex.mutationPath}
-                onChange={(e) =>
-                  setDraft({ ...draft, convex: { ...draft.convex, mutationPath: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-              <p className="mt-2 text-sm text-muted">
-                Media functions live under <code>media/</code> on the shared deployment, so this
-                normally reads <code>media/videos:createVodEntry</code>.
-              </p>
-            </div>
-            <div>
-              <Label>Ingest Node Token</Label>
-              <input
-                type="password"
-                value={draft.convex.nodeToken}
-                onChange={(e) =>
-                  setDraft({ ...draft, convex: { ...draft.convex, nodeToken: e.target.value } })
-                }
-                className={INPUT_CLASS}
-              />
-              <p className="mt-2 text-sm text-muted">
-                Identifies this workstation to the shared deployment. The ingest worker runs when
-                nobody is signed in, so it authenticates as a machine rather than borrowing an
-                operator&apos;s session. Ask an administrator to issue one; without it the app can
-                still transcode locally but cannot register anything.
-              </p>
-            </div>
-
-            <div className="rounded-control border p-4 border-rule bg-ink">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-paper">App Updates</h3>
-                  <p className="mt-1 text-sm text-muted">
-                    Existing installs can check this feed for new desktop builds. Windows can install in-app, while macOS opens the latest download and may need a security approval after replacement.
-                  </p>
+          {expert ? (
+            <>
+              <Group title="Team connection profile">
+                <div className="csn-hair-row flex flex-wrap items-center gap-3.5 px-4 py-3.5">
+                  <div className="min-w-[170px] flex-[1_1_220px] text-[13px] text-pretty text-body">
+                    Shared backend coordinates load in one step. Buckets, endpoints and function
+                    paths travel in the profile; this workstation’s keys never do.
+                  </div>
+                  <div className="flex flex-none gap-2">
+                    <GhostButton onClick={() => void handleImport()} disabled={isSavingSettings}>
+                      Import
+                    </GhostButton>
+                    <GhostButton onClick={() => void handleExport()}>Export</GhostButton>
+                  </div>
                 </div>
-                <span className="rounded-full border px-3 py-1 font-condensed text-overline uppercase border-rule text-muted">
-                  v{state.appUpdate.currentVersion}
-                </span>
-              </div>
+              </Group>
 
-              <div className="mt-4 space-y-4">
-                <ToggleRow
-                  title="Enable in-app updates"
-                  description="Checks the hosted release feed on launch and on a schedule, then offers the correct update action for the current platform."
-                  checked={draft.appUpdates.enabled}
-                  onChange={(checked) =>
-                    setDraft({
-                      ...draft,
-                      appUpdates: { ...draft.appUpdates, enabled: checked },
-                    })
-                  }
-                />
-
-                <div>
-                  <Label>Update Feed Base URL</Label>
+              <Group title="Storage credentials">
+                <div className="csn-hair-row px-4 py-3.5 text-[13px] text-pretty text-quiet">
+                  With a broker set, this station never holds the master storage keys — it
+                  receives ones scoped to a single bucket and prefix that expire within hours.
+                  Leave it empty to keep using the keys below.
+                </div>
+                <FieldRow label="Broker address">
                   <input
-                    value={draft.appUpdates.baseUrl}
-                    onChange={(e) =>
+                    value={draft.broker.url}
+                    onChange={(event) =>
+                      setDraft({ ...draft, broker: { ...draft.broker, url: event.target.value } })
+                    }
+                    placeholder="https://credentials.example.workers.dev"
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Station token">
+                  <input
+                    type="password"
+                    value={draft.broker.token}
+                    onChange={(event) =>
+                      setDraft({ ...draft, broker: { ...draft.broker, token: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <Row
+                  label="Stream playback through the broker"
+                  hint="Needed before the playback bucket can be made private. Turn this on only once the broker is deployed — and note the CSN web app reads the same files."
+                >
+                  <Toggle
+                    label="Stream playback through the broker"
+                    checked={draft.broker.streamMedia}
+                    onChange={(next) =>
+                      setDraft({ ...draft, broker: { ...draft.broker, streamMedia: next } })
+                    }
+                  />
+                </Row>
+              </Group>
+
+              <Group title="Archive — Backblaze B2">
+                <FieldRow label="Bucket">
+                  <input
+                    value={draft.b2.bucket}
+                    onChange={(event) =>
+                      setDraft({ ...draft, b2: { ...draft.b2, bucket: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Key ID">
+                  <input
+                    value={draft.b2.keyId}
+                    onChange={(event) =>
+                      setDraft({ ...draft, b2: { ...draft.b2, keyId: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Application key">
+                  <input
+                    type="password"
+                    value={draft.b2.applicationKey}
+                    onChange={(event) =>
                       setDraft({
                         ...draft,
-                        appUpdates: { ...draft.appUpdates, baseUrl: e.target.value },
+                        b2: { ...draft.b2, applicationKey: event.target.value },
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="S3 endpoint">
+                  <input
+                    value={draft.b2.s3Endpoint}
+                    onChange={(event) =>
+                      setDraft({ ...draft, b2: { ...draft.b2, s3Endpoint: event.target.value } })
+                    }
+                    placeholder="https://s3.us-west-004.backblazeb2.com"
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Prefix">
+                  <input
+                    value={draft.b2.pathPrefix}
+                    onChange={(event) =>
+                      setDraft({ ...draft, b2: { ...draft.b2, pathPrefix: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Stills prefix">
+                  <input
+                    value={draft.offload.b2PathPrefix}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        offload: { ...draft.offload, b2PathPrefix: event.target.value },
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+              </Group>
+
+              <Group title="Playback — Cloudflare R2">
+                <FieldRow label="Account ID">
+                  <input
+                    value={draft.r2.accountId}
+                    onChange={(event) =>
+                      setDraft({ ...draft, r2: { ...draft.r2, accountId: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Bucket">
+                  <input
+                    value={draft.r2.bucket}
+                    onChange={(event) =>
+                      setDraft({ ...draft, r2: { ...draft.r2, bucket: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Access key ID">
+                  <input
+                    value={draft.r2.accessKeyId}
+                    onChange={(event) =>
+                      setDraft({ ...draft, r2: { ...draft.r2, accessKeyId: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Secret access key">
+                  <input
+                    type="password"
+                    value={draft.r2.secretAccessKey}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        r2: { ...draft.r2, secretAccessKey: event.target.value },
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Prefix">
+                  <input
+                    value={draft.r2.pathPrefix}
+                    onChange={(event) =>
+                      setDraft({ ...draft, r2: { ...draft.r2, pathPrefix: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Public base URL">
+                  <input
+                    value={draft.r2.publicBaseUrl}
+                    onChange={(event) =>
+                      setDraft({ ...draft, r2: { ...draft.r2, publicBaseUrl: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+              </Group>
+
+              <Group title="Sign-in — Clerk">
+                <FieldRow label="Sign-in address">
+                  <input
+                    value={draft.auth.issuer}
+                    onChange={(event) =>
+                      setDraft({ ...draft, auth: { ...draft.auth, issuer: event.target.value } })
+                    }
+                    placeholder="https://accounts.example.com"
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Client id">
+                  <input
+                    value={draft.auth.clientId}
+                    onChange={(event) =>
+                      setDraft({ ...draft, auth: { ...draft.auth, clientId: event.target.value } })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+              </Group>
+
+              <Group title="Database — Convex">
+                <FieldRow label="Deployment">
+                  <input
+                    value={draft.convex.deploymentUrl}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        convex: { ...draft.convex, deploymentUrl: event.target.value },
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Mutation">
+                  <input
+                    value={draft.convex.mutationPath}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        convex: { ...draft.convex, mutationPath: event.target.value },
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Node token">
+                  <input
+                    type="password"
+                    value={draft.convex.nodeToken}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        convex: { ...draft.convex, nodeToken: event.target.value },
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+              </Group>
+
+              <QuietNote>
+                The node token identifies this workstation to the shared deployment. The ingest
+                worker runs when nobody is signed in, so it authenticates as a machine rather than
+                borrowing an operator’s session. Without one the app still converts locally but
+                cannot register anything.
+              </QuietNote>
+
+              <Group title="Pipeline">
+                <FieldRow label="Temp output folder">
+                  <input
+                    value={draft.tempOutputPath}
+                    onChange={(event) => setDraft({ ...draft, tempOutputPath: event.target.value })}
+                    className="csn-input"
+                  />
+                  <GhostButton onClick={() => void browseInto('tempOutputPath')}>Change</GhostButton>
+                </FieldRow>
+                <FieldRow label="Storage layout">
+                  <select
+                    value={draft.storage.layout}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        storage: {
+                          ...draft.storage,
+                          layout: event.target.value as AppSettings['storage']['layout'],
+                        },
+                      })
+                    }
+                    className="csn-select w-full"
+                  >
+                    <option value="canonical">Canonical (lifecycle-aware)</option>
+                    <option value="legacy">Legacy (flat path prefixes)</option>
+                  </select>
+                </FieldRow>
+                <FieldRow label="Offload copy mode">
+                  <select
+                    value={draft.offload.localCopyMode}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        offload: {
+                          ...draft.offload,
+                          localCopyMode: event.target
+                            .value as AppSettings['offload']['localCopyMode'],
+                        },
+                      })
+                    }
+                    className="csn-select w-full"
+                  >
+                    <option value="fast">Fast (size and modified-time checks)</option>
+                    <option value="safe">Safe (full-file checksums)</option>
+                  </select>
+                </FieldRow>
+                <FieldRow label="Ready-check passes">
+                  <input
+                    type="number"
+                    value={draft.readyCheckStablePasses}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        readyCheckStablePasses:
+                          Number(event.target.value) || draft.readyCheckStablePasses,
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Ready-check interval (ms)">
+                  <input
+                    type="number"
+                    value={draft.readyCheckIntervalMs}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        readyCheckIntervalMs:
+                          Number(event.target.value) || draft.readyCheckIntervalMs,
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Upload concurrency">
+                  <input
+                    type="number"
+                    value={draft.uploadConcurrency}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        uploadConcurrency: Number(event.target.value) || draft.uploadConcurrency,
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+                <FieldRow label="Progressive threshold (s)">
+                  <input
+                    type="number"
+                    value={draft.autoProgressiveMaxDurationSeconds}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        autoProgressiveMaxDurationSeconds:
+                          Number(event.target.value) || draft.autoProgressiveMaxDurationSeconds,
+                      })
+                    }
+                    className="csn-input"
+                  />
+                </FieldRow>
+              </Group>
+
+              <Group title={`App updates — v${state.appUpdate.currentVersion}`}>
+                <Row
+                  label="Check for new versions"
+                  hint="Checks on launch and on the interval below, then installs and restarts."
+                >
+                  <Toggle
+                    label="Check for new versions"
+                    checked={draft.appUpdates.enabled}
+                    onChange={(next) =>
+                      setDraft({ ...draft, appUpdates: { ...draft.appUpdates, enabled: next } })
+                    }
+                  />
+                </Row>
+                <FieldRow label="Feed base URL">
+                  <input
+                    value={draft.appUpdates.baseUrl}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        appUpdates: { ...draft.appUpdates, baseUrl: event.target.value },
                       })
                     }
                     placeholder="https://downloads.example.com/csn-media-bridge"
-                    className={INPUT_CLASS}
+                    className="csn-input"
                   />
-                </div>
-
-                <div>
-                  <Label>Update Check Interval (minutes)</Label>
+                </FieldRow>
+                <FieldRow label="Check every (minutes)">
                   <input
                     type="number"
                     value={draft.appUpdates.checkIntervalMinutes}
-                    onChange={(e) =>
+                    onChange={(event) =>
                       setDraft({
                         ...draft,
                         appUpdates: {
                           ...draft.appUpdates,
                           checkIntervalMinutes:
-                            Number(e.target.value) || draft.appUpdates.checkIntervalMinutes,
+                            Number(event.target.value) || draft.appUpdates.checkIntervalMinutes,
                         },
                       })
                     }
-                    className={INPUT_CLASS}
+                    className="csn-input"
                   />
+                </FieldRow>
+                <div className="csn-hair-row px-4 py-3 machine text-[12.5px] text-pretty break-all text-quiet">
+                  The app polls {feedManifestUrl}. {state.appUpdate.message}
                 </div>
+              </Group>
 
-                <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
-                  The updater uses platform-specific folders under this URL. For example, macOS arm64 expects
-                  `RELEASES.json` under `.../darwin/arm64`, and Windows Squirrel expects `RELEASES`
-                  under `.../win32/x64`.
-                </div>
+              <QuietNote>
+                Secrets are stored in this machine’s application support folder, readable only
+                by your user account.
+              </QuietNote>
+            </>
+          ) : null}
 
-                <div className="rounded-control border p-4 text-sm border-rule bg-ink-panel text-body">
-                  {state.appUpdate.message}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <ToggleRow
-                title="Auto-start watcher on launch"
-                description="Recommended once the ingest station is fully configured."
-                checked={draft.autoWatch}
-                onChange={(checked) => setDraft({ ...draft, autoWatch: checked })}
-              />
-              <ToggleRow
-                title="Fallback to software if hardware encode fails"
-                description="Retries the transcode with libx264 when NVENC or VideoToolbox runs into trouble."
-                checked={draft.autoFallbackToSoftware}
-                onChange={(checked) => setDraft({ ...draft, autoFallbackToSoftware: checked })}
-              />
-              <ToggleRow
-                title="Generate poster frame"
-                description="Extracts a poster image near the 10-second mark and publishes it with the playback output."
-                checked={draft.extractPosterFrame}
-                onChange={(checked) => setDraft({ ...draft, extractPosterFrame: checked })}
-              />
-              <ToggleRow
-                title="Verify uploads after sync"
-                description="Runs an rclone verification pass after archive and distribution uploads complete."
-                checked={draft.verifyUploads}
-                onChange={(checked) => setDraft({ ...draft, verifyUploads: checked })}
-              />
-              <ToggleRow
-                title="Clean up temp output after success"
-                description="Deletes local playback segments and poster files once the cloud upload and registration finish."
-                checked={draft.autoCleanupTempFiles}
-                onChange={(checked) => setDraft({ ...draft, autoCleanupTempFiles: checked })}
-              />
-              <ToggleRow
-                title="Desktop notifications"
-                description="Shows native system alerts when a job starts, succeeds, or fails."
-                checked={draft.enableNotifications}
-                onChange={(checked) => setDraft({ ...draft, enableNotifications: checked })}
-              />
-            </div>
-
-            <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
-              Auto delivery uses sidecar metadata first. When a source is set to `auto`, videos at
-              or below the threshold become progressive clips and longer videos become CMAF HLS/DASH VOD.
-            </div>
-
-            <div className="rounded-control border border-accent/40 p-4 text-sm bg-accent/[.13] text-accent-hi">
-              Secrets are stored through Electron Store with Electron safe storage encryption when
-              the operating system supports it.
-            </div>
+          <div className="flex flex-wrap items-center gap-3 pb-2 pt-2">
+            <button type="submit" disabled={isSavingSettings || !dirty} className="csn-btn-primary">
+              {isSavingSettings ? 'Saving…' : 'Save changes'}
+            </button>
+            <span className="text-caption text-muted">
+              {dirty ? 'You have unsaved changes.' : 'Everything here is saved.'}
+            </span>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-rule">
-          <div className="text-sm text-muted">
-            {notice ?? 'Save to persist and apply changes.'}
-          </div>
-          <button
-            type="submit"
-            disabled={isSavingSettings}
-            className="csn-btn-primary h-11 px-5"
-          >
-            {isSavingSettings ? 'Saving...' : 'Save Configuration'}
-          </button>
         </div>
       </form>
-    </div>
+
+      <Toast message={toast} />
+    </Screen>
   );
 }

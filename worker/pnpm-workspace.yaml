@@ -1,0 +1,14 @@
+# This directory is its own pnpm root, separate from the desktop app above it.
+packages:
+  - .
+
+allowBuilds:
+  esbuild: set this to true or false
+  workerd: set this to true or false
+
+# wrangler ships prebuilt binaries for esbuild and the workerd runtime, and both
+# need their install scripts to fetch them. Listed explicitly so pnpm does not
+# run anything else's.
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

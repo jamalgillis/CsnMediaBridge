@@ -92,7 +92,7 @@ typings/
 .vite/
 dist/
 
-# Electron-Forge
+# Build output
 out/
 
 # Tauri
@@ -100,3 +100,11 @@ src-tauri/target/
 
 .env.local
 .env.local.bak*
+
+# Updater signing keys. The private key belongs in CI secrets and in a password
+# manager, never in the repository.
+*.key
+*.key.pub
+
+# Wrangler local state
+.wrangler/

@@ -1,18 +1,43 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import StatusBadge from '../components/StatusBadge';
+import ErrorBoundary from '../components/ErrorBoundary';
 import StoredVideoPlayer from '../components/StoredVideoPlayer';
 import { useBridge } from '../context/BridgeContext';
 import { getPrimaryPlaybackUrl, inferStoredContentType, inferStoredDeliveryType } from '../shared/media';
 import { swatchFor } from '../shared/csn';
 import Thumb from '../components/csn/Thumb';
 import {
-  AddToCollectionIcon,
+  Disclosure,
+  ErrorNote,
+  Fact,
+  FactList,
+  PageHeading,
+  PlatformGlyph,
+  PlatformTag,
+  QuietNote,
+  Screen,
+  StatusChip,
+  Toast,
+  ToneChip,
+  statusLabel,
+  useToast,
+  type ChipTone,
+} from '../components/csn/bridge';
+import {
+  EmptyState,
+  Eyebrow,
+  FilterChip,
+  GhostButton,
+  SectionHead,
+  Segmented,
+} from '../components/csn/ui';
+import {
   CheckIcon,
   ChevronDownIcon,
   CloseIcon,
   CollectionIcon,
+  SearchIcon,
 } from '../components/csn/icons';
 import type {
   ContentType,
@@ -69,13 +94,6 @@ const SORT_PARAM_TO_OPTION: Record<string, SortOption> = {
 
 const LIBRARY_FILTER_OPTIONS = ['all', 'vod', 'short', 'published', 'processing'] as const;
 type LibraryFilterOption = (typeof LIBRARY_FILTER_OPTIONS)[number];
-const LIBRARY_FILTER_LABELS: Record<LibraryFilterOption, string> = {
-  all: 'All',
-  vod: 'VOD',
-  short: 'Short-form',
-  published: 'Published',
-  processing: 'Processing',
-};
 const FILTER_PARAM_TO_RAIL_ID: Record<LibraryFilterOption, string> = {
   all: 'all',
   vod: 'content-type:vod',
@@ -85,6 +103,154 @@ const FILTER_PARAM_TO_RAIL_ID: Record<LibraryFilterOption, string> = {
 };
 
 const PREVIEWABLE_STATUSES = new Set<StoredVideoStatus>(['ready', 'draft', 'archived']);
+
+/**
+ * The four states an operator sorts by, as opposed to the six the pipeline
+ * records: is it done, is it moving, or does it want me?
+ */
+type PlainFilter = 'all' | 'ready' | 'working' | 'attention';
+
+const PLAIN_FILTERS: { key: PlainFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'ready', label: 'Ready' },
+  { key: 'working', label: 'Working' },
+  { key: 'attention', label: 'Needs you' },
+];
+
+/** Player / Gallery / List — the three ways to look at the same library. */
+type BrowseMode = 'player' | 'gallery' | 'list';
+
+const BROWSE_MODES: readonly { key: BrowseMode; label: string }[] = [
+  { key: 'player', label: 'Player' },
+  { key: 'gallery', label: 'Gallery' },
+  { key: 'list', label: 'List' },
+];
+
+/**
+ * Publish state, read-only.
+ *
+ * Scheduling and publishing happen in the CSN web app; the node only mirrors
+ * what came back. The library record carries a single deployment state rather
+ * than a per-platform table, so this reports the one destination it can vouch
+ * for — csn.com — and says plainly when there is nothing to report. See
+ * design.md §4, "Shared publish state appears here read-only".
+ */
+interface PublishRow {
+  platform: string;
+  name: string;
+  state: string;
+  tone: ChipTone;
+  when: string;
+  url: string;
+  live: boolean;
+}
+
+interface PublishSummary {
+  rows: PublishRow[];
+  tags: { platform: string; live: boolean }[];
+  note: string;
+}
+
+function publishSummary(video: StoredVideoSnapshot): PublishSummary {
+  const status = getEffectiveSocialStatus(video);
+  const url = video.playbackUrl || video.masterPlaylistUrl || '';
+
+  if (status === 'published') {
+    return {
+      rows: [
+        {
+          platform: 'Website',
+          name: 'csn.com',
+          state: 'Posted',
+          tone: 'neutral',
+          when: formatDate(video.updatedAt),
+          url,
+          live: true,
+        },
+      ],
+      tags: [{ platform: 'Website', live: true }],
+      note: 'Published in 1 place',
+    };
+  }
+
+  if (status === 'scheduled') {
+    return {
+      rows: [
+        {
+          platform: 'Website',
+          name: 'csn.com',
+          state: 'Scheduled',
+          tone: 'bright',
+          when: formatDate(video.scheduledPublishAt),
+          url: '',
+          live: false,
+        },
+      ],
+      tags: [{ platform: 'Website', live: false }],
+      note: '1 scheduled',
+    };
+  }
+
+  if (status === 'staged') {
+    return {
+      rows: [
+        {
+          platform: 'Website',
+          name: 'csn.com',
+          state: 'Draft',
+          tone: 'quiet',
+          when: 'not scheduled',
+          url: '',
+          live: false,
+        },
+      ],
+      tags: [{ platform: 'Website', live: false }],
+      note: 'Drafted, not published',
+    };
+  }
+
+  if (status === 'failed') {
+    return {
+      rows: [
+        {
+          platform: 'Website',
+          name: 'csn.com',
+          state: 'Needs you',
+          tone: 'live',
+          when: formatDate(video.updatedAt),
+          url: '',
+          live: false,
+        },
+      ],
+      tags: [{ platform: 'Website', live: false }],
+      note: 'Publishing stopped',
+    };
+  }
+
+  return { rows: [], tags: [], note: 'Not published' };
+}
+
+/** The addresses this video can be reached at, once it has any. */
+function videoLinks(video: StoredVideoSnapshot) {
+  return [
+    { label: 'Watch link', url: getPrimaryPlaybackUrl(video) },
+    { label: 'Streaming manifest', url: video.dashManifestUrl ?? '' },
+    { label: 'Thumbnail', url: video.posterUrl ?? '' },
+  ].filter((link) => Boolean(link.url));
+}
+
+function matchesPlainFilter(video: StoredVideoSnapshot, filter: PlainFilter) {
+  if (filter === 'all') {
+    return true;
+  }
+  if (filter === 'ready') {
+    return video.status === 'ready';
+  }
+  if (filter === 'working') {
+    return video.status === 'processing' || video.status === 'uploading';
+  }
+  return video.status === 'error';
+}
 const DEFAULT_SERIES_OPTIONS = [
   'Friday Night Lights',
   'Game Highlights',
@@ -222,21 +388,6 @@ function formatDate(value: string | undefined) {
   return new Date(value).toLocaleString();
 }
 
-function formatShortDate(value: string | undefined) {
-  if (!value) {
-    return 'Unknown date';
-  }
-
-  const date = new Date(value);
-  // Card meta lines drop the year unless it differs from the current one.
-  const sameYear = date.getFullYear() === new Date().getFullYear();
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  });
-}
-
 /** Exact dimensions, for the metadata table. */
 function formatResolution(video: StoredVideoSnapshot) {
   if (!video.sourceWidth || !video.sourceHeight) {
@@ -325,26 +476,6 @@ function formatArchitectureLabel(architecture: DeliveryArchitecture) {
   if (architecture === 'progressive-mp4') return 'Progressive MP4';
   if (architecture === 'progressive-webm') return 'Progressive WebM';
   return 'Master Archive';
-}
-
-function getStatusTone(status: StoredVideoStatus): 'good' | 'active' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'ready') {
-    return 'good';
-  }
-
-  if (status === 'error' || status === 'archived') {
-    return 'danger';
-  }
-
-  if (status === 'processing' || status === 'uploading') {
-    return 'active';
-  }
-
-  if (status === 'draft') {
-    return 'warning';
-  }
-
-  return 'neutral';
 }
 
 function hasPlayableSource(video: StoredVideoSnapshot) {
@@ -1258,6 +1389,10 @@ export default function PlayerPage() {
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedRailItemId, setSelectedRailItemId] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | StoredVideoStatus>('all');
+  // The four chips an operator actually sorts by. The finer status/type/
+  // delivery filters below are the pipeline's own vocabulary and stay behind
+  // the disclosure.
+  const [plainFilter, setPlainFilter] = useState<PlainFilter>('all');
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | ContentType>('all');
   const [deliveryFilter, setDeliveryFilter] = useState<'all' | DeliveryType>('all');
 
@@ -1286,7 +1421,9 @@ export default function PlayerPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [isBulkWorking, setIsBulkWorking] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
   const assetGridRef = useRef<HTMLDivElement | null>(null);
+  const { toast, flash } = useToast();
 
   const hasConvexConfig = Boolean(settings.convex.deploymentUrl && settings.convex.mutationPath);
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -1384,18 +1521,6 @@ export default function PlayerPage() {
     setSelectedRailItemId(FILTER_PARAM_TO_RAIL_ID[libraryFilterParam] ?? 'all');
   }, [libraryFilterParam]);
 
-  function setLibraryFilter(next: LibraryFilterOption) {
-    setSearchParams((current) => {
-      const nextParams = new URLSearchParams(current);
-      if (next === 'all') {
-        nextParams.delete('filter');
-      } else {
-        nextParams.set('filter', next);
-      }
-      return nextParams;
-    });
-  }
-
   function setCollectionFilter(next: string) {
     setSearchParams((current) => {
       const nextParams = new URLSearchParams(current);
@@ -1427,6 +1552,10 @@ export default function PlayerPage() {
         return false;
       }
 
+      if (!matchesPlainFilter(video, plainFilter)) {
+        return false;
+      }
+
       if (contentTypeFilter !== 'all' && inferStoredContentType(video) !== contentTypeFilter) {
         return false;
       }
@@ -1447,6 +1576,7 @@ export default function PlayerPage() {
     videos,
     selectedRailEntry,
     statusFilter,
+    plainFilter,
     contentTypeFilter,
     deliveryFilter,
     collectionParam,
@@ -1891,964 +2021,902 @@ export default function PlayerPage() {
   }
 
   const emptyLibraryCopy = getEmptyLibraryCopy(hasConvexConfig);
+
+  // Player / Gallery / List. The design's default is the gallery — the first
+  // thing an operator wants is to see the videos, and the default action on any
+  // one of them is to play it.
+  const browse: BrowseMode = (() => {
+    const layout = searchParams.get('layout');
+    return layout === 'list' || layout === 'player' ? layout : 'gallery';
+  })();
+
+  function setBrowse(next: BrowseMode) {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (next === 'gallery') {
+          params.delete('layout');
+        } else {
+          params.set('layout', next);
+        }
+        return params;
+      },
+      { replace: true },
+    );
+  }
+
+  function setSearchQuery(next: string) {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (next) {
+          params.set('q', next);
+        } else {
+          params.delete('q');
+        }
+        return params;
+      },
+      { replace: true },
+    );
+  }
+
+  function openVideo(videoId: string) {
+    setSelectedVideoId(videoId);
+    setBrowse('player');
+  }
+
+  const plainCounts: Record<PlainFilter, number> = {
+    all: videos.length,
+    ready: videos.filter((video) => video.status === 'ready').length,
+    working: videos.filter((video) => video.status === 'processing' || video.status === 'uploading')
+      .length,
+    attention: videos.filter((video) => video.status === 'error').length,
+  };
+
+  const selectedIndex = filteredVideos.findIndex((video) => video._id === selectedVideo?._id);
+  const positionNote =
+    selectedIndex >= 0 ? `${selectedIndex + 1} of ${filteredVideos.length}` : '';
+
   return (
-    <div className="px-6 pb-11 pt-[22px]">
-      {/* Page header — the title lives in the body, not the top bar, as on the site. */}
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="font-display text-page text-paper">Library</h1>
-          <div className="mt-1 text-control text-muted">
-            <span className="font-mono">{filteredVideos.length}</span>
-            {filteredVideos.length === videos.length ? '' : ` of ${videos.length}`} asset
-            {filteredVideos.length === 1 ? '' : 's'}
-          </div>
+    <Screen label="Videos">
+      {/* The screen owns its own chrome: search, the four chips, and the view
+          switch. There is no top bar following you around the app. */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-rule px-[26px] pb-[18px] pt-[22px]">
+        <label className="csn-field h-9 max-w-[320px] min-w-[170px] flex-[1_1_200px] px-[11px]">
+          <SearchIcon size={14} className="flex-none text-muted" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search videos…"
+            className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-paper outline-none"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              title="Clear search"
+              className="flex-none text-muted transition-colors hover:text-paper"
+            >
+              <CloseIcon size={13} />
+            </button>
+          ) : null}
+        </label>
+
+        <div className="flex flex-wrap items-center gap-[7px]">
+          {PLAIN_FILTERS.map((filter) => (
+            <FilterChip
+              key={filter.key}
+              label={filter.label}
+              count={String(plainCounts[filter.key])}
+              active={plainFilter === filter.key}
+              onClick={() => setPlainFilter(filter.key)}
+            />
+          ))}
         </div>
 
-        <div className="flex flex-none items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setRefreshKey((current) => current + 1)}
-            className="csn-btn-secondary"
-          >
-            Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleRepairStoredUrls()}
-            disabled={!hasConvexConfig || isRepairingUrls}
-            className="csn-btn-secondary"
-          >
-            {isRepairingUrls ? 'Repairing…' : 'Repair URLs'}
-          </button>
+        <span className="min-w-[8px] flex-1" />
+
+        {/* Bulk selection has no slot in the design, but it is the only way to
+            tidy several assets at once, so it keeps a quiet capsule here. */}
+        <GhostButton onClick={() => setSelectMode(!selectMode)}>
+          {selectMode ? 'Done selecting' : 'Select'}
+        </GhostButton>
+
+        <div className="flex-none">
+          <Segmented<BrowseMode> options={BROWSE_MODES} value={browse} onChange={setBrowse} />
         </div>
       </div>
 
-      {/* Filter chips + series dropdown */}
-      <div className="mb-5 flex flex-wrap items-center gap-[9px]">
-        {LIBRARY_FILTER_OPTIONS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setLibraryFilter(option)}
-            className={libraryFilterParam === option ? 'csn-chip-on' : 'csn-chip-off'}
-          >
-            {LIBRARY_FILTER_LABELS[option]}
-          </button>
-        ))}
-
-        <div className="csn-rule mx-1" />
-
-        <SeriesFilter
-          videos={videos}
-          value={collectionParam}
-          onChange={(next) => setCollectionFilter(next)}
-        />
-
-        {collectionParam && (
-          <button
-            type="button"
-            onClick={clearCollectionFilter}
-            className="flex h-9 items-center gap-1.5 rounded-[9px] border border-rule-strong bg-transparent px-[11px] text-[12.5px] text-muted transition hover:border-white/[.22] hover:text-paper"
-          >
-            Clear
-            <CloseIcon size={13} />
-          </button>
-        )}
-      </div>
-
-      {/* Secondary filters, specific to this pipeline (no equivalent on the site). */}
-      <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2">
-        <FilterChipGroup
-          label="Status"
-          options={STATUS_CHIP_OPTIONS}
-          value={statusFilter}
-          onChange={(value) => setStatusFilter(value)}
-          renderLabel={(option) => (option === 'all' ? 'All' : formatStatusLabel(option))}
-        />
-        <FilterChipGroup
-          label="Type"
-          options={CONTENT_TYPE_CHIP_OPTIONS}
-          value={contentTypeFilter}
-          onChange={(value) => setContentTypeFilter(value)}
-          renderLabel={(option) => (option === 'all' ? 'All' : formatContentTypeLabel(option))}
-        />
-        <FilterChipGroup
-          label="Delivery"
-          options={DELIVERY_CHIP_OPTIONS}
-          value={deliveryFilter}
-          onChange={(value) => setDeliveryFilter(value)}
-          renderLabel={(option) => (option === 'all' ? 'All' : formatDeliveryLabel(option))}
-        />
-      </div>
-
-      {/* Bulk action bar, shown once something is checked in select mode. */}
-      {selectMode && selectedCount > 0 && (
-        <div className="mb-4 flex items-center gap-3 rounded-panel border border-accent/40 bg-accent/[.08] px-4 py-2.5">
-          <span className="text-copy font-semibold text-paper">
-            <span className="font-mono">{selectedCount}</span> selected
-          </span>
-          <button
-            type="button"
-            onClick={() => void handleBulkAddToCollection()}
-            disabled={isBulkWorking}
-            className="csn-btn-secondary h-9"
-          >
-            Add to collection
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleBulkDelete()}
-            disabled={isBulkWorking}
-            className="csn-btn-danger h-9"
-          >
+      {selectMode && selectedCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-3 border-b border-rule bg-ink-raised px-[26px] py-3">
+          <span className="machine text-[13px] font-bold text-paper">{selectedCount} selected</span>
+          <GhostButton onClick={() => void handleBulkAddToCollection()} disabled={isBulkWorking}>
+            Add to a playlist
+          </GhostButton>
+          <GhostButton onClick={() => void handleBulkDelete()} disabled={isBulkWorking}>
             Delete
-          </button>
+          </GhostButton>
         </div>
-      )}
+      ) : null}
 
-      {(libraryNotice || loadError || isLoading) && (
-        <div className="mb-4 space-y-2">
-          {isLoading && (
-            <p className="rounded-control border border-accent/40 bg-accent/[.13] px-4 py-2 text-copy text-accent-hi">
-              Refreshing the stored video library…
-            </p>
-          )}
-          {libraryNotice && (
-            <p className="rounded-control border border-state-ok/30 bg-state-ok/[.13] px-4 py-2 text-copy text-state-ok">
-              {libraryNotice}
-            </p>
-          )}
-          {loadError && (
-            <p className="rounded-control border border-state-danger/30 bg-state-danger/[.12] px-4 py-2 text-copy text-state-danger">
-              {loadError}
-            </p>
-          )}
+      {loadError ? (
+        <div className="px-[26px] pt-5">
+          <ErrorNote>{loadError}</ErrorNote>
         </div>
-      )}
+      ) : null}
+      {libraryNotice ? (
+        <div className="px-[26px] pt-5">
+          <QuietNote>{libraryNotice}</QuietNote>
+        </div>
+      ) : null}
 
-      <div className="flex min-h-0 gap-5">
-        <div className="min-w-0 flex-1">
+      {filteredVideos.length === 0 ? (
+        <div className="px-[26px] py-10">
+          <EmptyState
+            title={videos.length === 0 ? emptyLibraryCopy.title : 'No matches'}
+            body={
+              videos.length === 0
+                ? emptyLibraryCopy.body
+                : 'Nothing matches that search. Clear it, or pick a different chip.'
+            }
+            action={
+              !hasConvexConfig ? (
+                <Link to="/settings" className="csn-btn-capsule">
+                  Open Settings
+                </Link>
+              ) : undefined
+            }
+          />
+        </div>
+      ) : browse === 'gallery' ? (
+        <div
+          ref={assetGridRef}
+          onKeyDown={handleAssetGridKeyDown}
+          tabIndex={0}
+          className="px-[26px] pb-10 pt-5 outline-none"
+        >
           <div
-            ref={assetGridRef}
-            onKeyDown={handleAssetGridKeyDown}
-            tabIndex={0}
-            className="outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
+            data-gallery-assets-grid
+            className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4"
           >
-              {filteredVideos.length === 0 ? (
-                <div className="flex flex-col items-center justify-center px-5 py-20 text-center">
-                  <div className="max-w-md">
-                    <h2 className="font-display text-section text-paper">
-                      {videos.length === 0 ? emptyLibraryCopy.title : 'No assets match your filters.'}
-                    </h2>
-                    <p className="mt-2.5 text-copy leading-relaxed text-muted">
-                      {videos.length === 0
-                        ? emptyLibraryCopy.body
-                        : 'Clear the search or relax the chip filters to bring more assets back.'}
-                    </p>
-                  </div>
-                  {!hasConvexConfig && (
-                    <Link
-                      to="/settings"
-                      className="csn-btn-primary mt-5"
-                    >
-                      Open Settings
-                    </Link>
-                  )}
-                </div>
-              ) : viewMode === 'list' ? (
-                <div data-gallery-assets-grid className="flex flex-col gap-2">
-                  {filteredVideos.map((video) => {
-                    const isSelected = video._id === selectedVideo?._id;
-                    const isChecked = Boolean(selectedIds[video._id]);
-                    const posterUrl = appendCacheBust(video.posterUrl, video.updatedAt);
-                    const kind = inferStoredContentType(video) === 'vod' ? 'VOD' : 'Short';
-
-                    return (
-                      <div
-                        key={video._id}
-                        data-gallery-asset-id={video._id}
-                        onClick={() => (selectMode ? toggleSelected(video._id) : setSelectedVideoId(video._id))}
-                        className={`flex cursor-pointer items-center gap-3.5 rounded-[12px] border px-3.5 py-2.5 transition ${
-                          isSelected && !selectMode
-                            ? 'border-accent/50 bg-accent/[.08]'
-                            : isChecked
-                              ? 'border-accent-hi bg-accent/[.13]'
-                              : 'border-white/[.06] bg-ink-raised hover:border-white/[.16]'
+            {filteredVideos.map((video) => {
+              const isCurrent = video._id === selectedVideo?._id;
+              const isChecked = Boolean(selectedIds[video._id]);
+              return (
+                <button
+                  key={video._id}
+                  type="button"
+                  data-gallery-asset-id={video._id}
+                  onClick={() => (selectMode ? toggleSelected(video._id) : openVideo(video._id))}
+                  className={`block w-full cursor-pointer rounded-card border p-[11px] text-left transition-colors ${
+                    isChecked
+                      ? 'border-accent bg-ink-raised'
+                      : isCurrent
+                        ? 'border-rule-strong bg-ink-raised'
+                        : 'border-rule bg-ink-raised hover:border-rule-strong'
+                  }`}
+                >
+                  <Thumb
+                    seed={video._id}
+                    posterUrl={appendCacheBust(video.posterUrl, video.updatedAt)}
+                    duration={formatDuration(video.durationSeconds)}
+                    className="aspect-video w-full rounded-chip"
+                  >
+                    {isCurrent && !selectMode ? (
+                      <span className="absolute left-[7px] top-[7px] rounded-chip bg-paper px-[7px] py-[3px] font-condensed text-[10px] font-bold uppercase tracking-[.1em] text-ink">
+                        Playing
+                      </span>
+                    ) : null}
+                    {selectMode ? (
+                      <span
+                        className={`absolute left-[7px] top-[7px] flex h-[22px] w-[22px] items-center justify-center rounded-chip border ${
+                          isChecked ? 'border-accent bg-accent' : 'border-paper/40 bg-ink/60'
                         }`}
                       >
-                        {selectMode && (
-                          <div
-                            className={`flex h-[22px] w-[22px] flex-none items-center justify-center rounded-[6px] border-2 ${
-                              isChecked ? 'border-accent-hi bg-accent' : 'bg-transparent border-white/30'
-                            }`}
-                          >
-                            {isChecked && (
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3}>
-                                <path d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </div>
-                        )}
+                        {isChecked ? <CheckIcon size={13} /> : null}
+                      </span>
+                    ) : null}
+                  </Thumb>
 
-                        <Thumb
-                          seed={video._id}
-                          posterUrl={posterUrl}
-                          compact
-                          duration={formatDuration(video.durationSeconds)}
-                          className="aspect-video w-[120px] flex-none rounded-[8px]"
-                        />
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-condensed text-[17px] font-bold leading-tight text-paper">
-                            {video.title}
-                          </p>
-                          <p className="mt-[3px] font-mono text-count text-dim">
-                            {formatResolutionShort(video)} · {formatFileSize(video.sourceFileSizeBytes)} · {formatShortDate(video.updatedAt)}
-                          </p>
-                        </div>
-
-                        <span
-                          className={`hidden flex-none sm:inline-block ${kind === 'Short' ? 'csn-kind-short' : 'csn-kind'}`}
-                        >
-                          {kind}
-                        </span>
-
-                        <div className="hidden flex-none lg:block">
-                          <StatusBadge tone={getStatusTone(video.status)}>
-                            {formatStatusLabel(video.status)}
-                          </StatusBadge>
-                        </div>
-
-                        <button
-                          type="button"
-                          title="Add to collection"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedIds({ [video._id]: true });
-                            void handleBulkAddToCollection();
-                          }}
-                          className="csn-quiet-btn h-8 w-8 rounded-chip"
-                        >
-                          <AddToCollectionIcon size={15} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div
-                  data-gallery-assets-grid
-                  className="grid gap-4"
-                  style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))' }}
-                >
-                  {filteredVideos.map((video) => {
-                    const isSelected = video._id === selectedVideo?._id;
-                    const isChecked = Boolean(selectedIds[video._id]);
-                    const posterUrl = appendCacheBust(video.posterUrl, video.updatedAt);
-                    const kind = inferStoredContentType(video) === 'vod' ? 'VOD' : 'Short';
-
-                    return (
-                      <div
-                        key={video._id}
-                        data-gallery-asset-id={video._id}
-                        onClick={() => (selectMode ? toggleSelected(video._id) : setSelectedVideoId(video._id))}
-                        className={`group cursor-pointer overflow-hidden rounded-[13px] border transition ${
-                          isSelected && !selectMode
-                            ? 'border-accent-hi/50 shadow-[0_0_0_2px_rgba(238,21,24,0.35)]'
-                            : isChecked
-                              ? 'border-accent-hi shadow-[0_0_0_2px_rgba(238,21,24,0.45)]'
-                              : 'border-white/[.07] hover:border-white/20'
-                        } bg-ink-panel`}
-                      >
-                        <Thumb
-                          seed={video._id}
-                          posterUrl={posterUrl}
-                          className="aspect-video"
-                          duration={formatDuration(video.durationSeconds)}
-                        >
-
-                          {selectMode ? (
-                            <div
-                              className={`absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-[7px] border-2 shadow ${
-                                isChecked ? 'border-accent-hi bg-accent' : 'border-white/70 bg-black/40'
-                              }`}
-                            >
-                              {isChecked && (
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3}>
-                                  <path d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                          ) : (
-                            <span className={`absolute left-[9px] top-[9px] ${kind === 'Short' ? 'csn-kind-short' : 'csn-kind'}`}>
-                              {kind}
-                            </span>
-                          )}
-
-                          <div className="absolute right-[9px] top-[9px]">
-                            <StatusBadge tone={getStatusTone(video.status)}>
-                              {formatStatusLabel(video.status)}
-                            </StatusBadge>
-                          </div>
-
-                          <div className="csn-play pointer-events-none">
-                            <svg width="14" height="14" viewBox="0 0 24 24">
-                              <path d="M8 5l12 7-12 7z" fill="#fff" />
-                            </svg>
-                          </div>
-
-                        </Thumb>
-
-                        <div className="px-3 pb-3 pt-2.5">
-                          <p className="truncate font-condensed text-lg font-bold leading-[1.06] text-paper">
-                            {video.title}
-                          </p>
-                          <div className="mt-1.5 flex items-center justify-between gap-2">
-                            <p className="min-w-0 flex-1 truncate font-mono text-meta text-dim">
-                              {formatResolutionShort(video)} · {formatFileSize(video.sourceFileSizeBytes)} · {formatShortDate(video.updatedAt)}
-                            </p>
-                            <div className="flex flex-none items-center gap-1.5">
-                              <button
-                                type="button"
-                                title="Add to collection"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSelectedIds({ [video._id]: true });
-                                  void handleBulkAddToCollection();
-                                }}
-                                className="csn-quiet-btn h-[26px] w-[26px]"
-                              >
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9}>
-                                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                                  <path d="M12 11v5M9.5 13.5h5" />
-                                </svg>
-                            </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                  <div className="mt-[11px] truncate text-[13.5px] font-semibold text-paper">
+                    {video.title}
+                  </div>
+                  <div className="mt-[7px] flex flex-wrap items-center gap-[9px]">
+                    <StatusChip status={video.status} />
+                    <span className="machine text-[11.5px] text-muted">
+                      {formatResolutionShort(video)} · {formatFileSize(video.sourceFileSizeBytes)}
+                    </span>
+                  </div>
+                  <div className="mt-[9px] flex flex-wrap items-center gap-1.5">
+                    {publishSummary(video).tags.map((tag) => (
+                      <PlatformTag key={tag.platform} platform={tag.platform} live={tag.live} />
+                    ))}
+                    <span className="machine text-[11px] text-muted">
+                      {publishSummary(video).note}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-
-          <aside className="hidden w-[384px] flex-none xl:block">
-            <div className="csn-card sticky top-0 flex max-h-[calc(100vh-140px)] flex-col overflow-hidden text-paper">
-              {selectedVideo ? (
-                <>
-                  <div className="border-b border-white/10 px-5 pt-3">
-                    <p className="mb-2 font-condensed text-overline uppercase text-dim">
-                      Inspector
-                    </p>
-                    <div className="flex gap-5">
-                      {([
-                        ['details', 'Details'],
-                        ['metadata', 'Metadata'],
-                        ['poster', 'Posters'],
-                      ] as const).map(([tabId, label]) => (
-                        <button
-                          key={tabId}
-                          onClick={() => setInspectorTab(tabId)}
-                          type="button"
-                          className={inspectorTab === tabId ? 'csn-tab-on py-2.5' : 'csn-tab py-2.5'}
-                        >
-                          {label}
-                        </button>
-                      ))}
+        </div>
+      ) : browse === 'list' ? (
+        <div
+          ref={assetGridRef}
+          onKeyDown={handleAssetGridKeyDown}
+          tabIndex={0}
+          className="px-[26px] pb-10 pt-5 outline-none"
+        >
+          <div data-gallery-assets-grid className="csn-hair">
+            {filteredVideos.map((video) => {
+              const isCurrent = video._id === selectedVideo?._id;
+              const isChecked = Boolean(selectedIds[video._id]);
+              return (
+                <button
+                  key={video._id}
+                  type="button"
+                  data-gallery-asset-id={video._id}
+                  onClick={() => (selectMode ? toggleSelected(video._id) : openVideo(video._id))}
+                  className={`flex w-full cursor-pointer flex-wrap items-center gap-3.5 border-none px-3.5 py-[11px] text-left ${
+                    isChecked || isCurrent ? 'bg-ink-tile' : 'bg-ink-raised hover:bg-ink-tile'
+                  }`}
+                >
+                  {selectMode ? (
+                    <span
+                      className={`flex h-[22px] w-[22px] flex-none items-center justify-center rounded-chip border ${
+                        isChecked ? 'border-accent bg-accent' : 'border-paper/30'
+                      }`}
+                    >
+                      {isChecked ? <CheckIcon size={13} /> : null}
+                    </span>
+                  ) : null}
+                  <Thumb
+                    seed={video._id}
+                    posterUrl={appendCacheBust(video.posterUrl, video.updatedAt)}
+                    className="aspect-video w-[88px] flex-none rounded-chip"
+                  />
+                  <div className="flex min-w-[150px] flex-[1_1_200px] flex-col gap-[5px]">
+                    <div className="truncate text-[13.5px] font-semibold text-paper">
+                      {video.title}
+                    </div>
+                    <div className="truncate machine text-[11.5px] text-muted">
+                      {formatResolution(video)} · {formatDuration(video.durationSeconds)} ·{' '}
+                      {formatFileSize(video.sourceFileSizeBytes)}
                     </div>
                   </div>
-
-                  <div className="flex-1 overflow-y-auto px-5 py-5">
-                    {inspectorTab === 'details' && (
-                      <div className="space-y-5">
-                        <div className="overflow-hidden rounded-card border border-white/10 bg-ink-tile">
-                          {previewAvailable ? (
-                            <StoredVideoPlayer controlsVisibility="hover" video={selectedVideo} />
-                          ) : (
-                            <div className="flex min-h-[13rem] flex-col items-center justify-center gap-3 p-5 text-center">
-                              <StatusBadge tone="warning">
-                                {formatStatusLabel(selectedVideo.status)}
-                              </StatusBadge>
-                              <div className="max-w-sm">
-                                <h3 className="text-base font-semibold text-paper">
-                                  {getPreviewUnavailableCopy(selectedVideo.status).title}
-                                </h3>
-                                <p className="mt-2 text-xs leading-5 text-muted">
-                                  {getPreviewUnavailableCopy(selectedVideo.status).body}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div>
-                          <h3 className="font-display text-section text-paper">{selectedVideo.title}</h3>
-                          <p className="mt-1 truncate font-mono text-count text-dim">
-                            {selectedVideo.sourceFileName}
-                          </p>
-                        </div>
-
-                        {inferStoredContentType(selectedVideo) !== 'clip' && (
-                          <div>
-                            <div className="mb-2 flex items-center justify-between">
-                              <p className="font-condensed text-overline uppercase text-dim">
-                                Derived short-form clips
-                              </p>
-                              <span className="text-[10px] text-dim">{derivedClips.length}</span>
-                            </div>
-                            {derivedClips.length > 0 ? (
-                              <div className="flex gap-2 overflow-x-auto pb-1">
-                                {derivedClips.map((clip) => (
-                                  <button
-                                    key={clip._id}
-                                    type="button"
-                                    onClick={() => setSelectedVideoId(clip._id)}
-                                    className="w-24 flex-none rounded-control border border-white/10 bg-white/5 p-2 text-left transition hover:border-state-ok/50"
-                                  >
-                                    <p className="truncate text-[11px] font-medium text-paper">{clip.title}</p>
-                                    <p className="mt-0.5 text-[10px] text-muted">
-                                      {clip.clipAspectRatio ?? formatResolution(clip)}
-                                    </p>
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-dim">No clips created from this asset yet.</p>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="flex flex-wrap gap-1.5">
-                          {[
-                            formatDuration(selectedVideo.durationSeconds),
-                            formatResolution(selectedVideo),
-                            formatFrameRate(selectedVideo.sourceFrameRate),
-                            formatFileSize(selectedVideo.sourceFileSizeBytes),
-                            selectedVideo.encoder,
-                          ].map((fact) => (
-                            <span
-                              key={fact}
-                              className="rounded-chip bg-white/[.06] px-2.5 py-1 font-mono text-meta text-body"
-                            >
-                              {fact}
-                            </span>
-                          ))}
-                        </div>
-
-                        <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                          <p className="font-condensed text-overline uppercase text-dim">
-                            Description
-                          </p>
-                          <p className="mt-2 text-copy leading-relaxed text-body">
-                            {selectedVideo.description?.trim() ||
-                              'No description has been added yet. Update from the Metadata tab.'}
-                          </p>
-                        </div>
-
-                        <div className="csn-well px-4">
-                          {[
-                            { k: 'Added', v: formatDate(selectedVideo.createdAt) },
-                            { k: 'Updated', v: formatDate(selectedVideo.updatedAt) },
-                            {
-                              k: 'Recorded',
-                              v: selectedVideo.recordedAt ? formatDate(selectedVideo.recordedAt) : 'Not set',
-                            },
-                            { k: 'Delivery', v: inferStoredDeliveryType(selectedVideo) },
-                            {
-                              k: 'Pipeline',
-                              v: formatPipelineLayerLabel(
-                                matchesPipelineLayer(selectedVideo, 'social-scheduled')
-                                  ? 'social-scheduled'
-                                  : matchesPipelineLayer(selectedVideo, 'social-staging')
-                                    ? 'social-staging'
-                                    : 'web-streaming',
-                              ),
-                            },
-                            { k: 'Content Type', v: inferStoredContentType(selectedVideo) },
-                            { k: 'Video Codec', v: formatCodec(selectedVideo.sourceVideoCodec) },
-                            { k: 'Audio Codec', v: formatCodec(selectedVideo.sourceAudioCodec) },
-                            {
-                              k: 'Review',
-                              v: formatReviewStatusLabel(getEffectiveReviewStatus(selectedVideo)),
-                            },
-                            {
-                              k: 'Social',
-                              v: formatSocialStatusLabel(getEffectiveSocialStatus(selectedVideo)),
-                            },
-                            { k: 'Project', v: selectedVideo.projectName ?? 'Not set' },
-                            { k: 'Event', v: selectedVideo.eventName ?? 'Not set' },
-                            {
-                              k: 'Camera / Source',
-                              v:
-                                [selectedVideo.cameraId, selectedVideo.sourceNode].filter(Boolean).join(' / ') ||
-                                'Not set',
-                            },
-                            { k: 'Source File', v: selectedVideo.sourceFileName },
-                          ].map((row, index, rows) => (
-                            <div
-                              key={row.k}
-                              className={`flex items-center justify-between gap-4 py-2.5 text-[13px] ${
-                                index < rows.length - 1 ? 'border-b border-white/[.05]' : ''
-                              }`}
-                            >
-                              <span className="text-dim">{row.k}</span>
-                              <span className="truncate font-mono text-[12px] text-body" title={row.v}>
-                                {row.v}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {selectedVideo.errorMessage && (
-                          <div className="rounded-card border border-state-danger/30 bg-state-danger/[.12] p-3 text-xs text-state-danger">
-                            {selectedVideo.errorMessage}
-                          </div>
-                        )}
-
-                        <div className="rounded-[13px] border border-white/[.07] bg-ink-raised p-4">
-                          <p className="mb-2 font-condensed text-overline uppercase text-dim">Master Archive</p>
-                          {selectedVideo.archiveObjectKey ? (
-                            <>
-                              <p
-                                className="truncate font-mono text-[12px] text-body"
-                                title={selectedVideo.archiveObjectKey}
-                              >
-                                {selectedVideo.archiveObjectKey}
-                              </p>
-                              <p className="mt-2 text-xs leading-5 text-muted">
-                                The full-quality original in Backblaze B2. It is never served to
-                                viewers — preview it here, or pull it back to disk to re-cut.
-                              </p>
-
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                  onClick={() => void handlePreviewArchive()}
-                                  disabled={isLoadingArchivePreview || isRetrievingArchive}
-                                  className="rounded-control border border-white/12 bg-white/[.06] px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-white/[.1] disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {isLoadingArchivePreview ? 'Signing…' : 'Preview master'}
-                                </button>
-                                <button
-                                  onClick={() => void handleRetrieveArchive()}
-                                  disabled={isRetrievingArchive || isLoadingArchivePreview}
-                                  className="rounded-control border border-white/12 bg-white/[.06] px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-white/[.1] disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {isRetrievingArchive ? 'Retrieving…' : 'Retrieve for processing'}
-                                </button>
-                              </div>
-
-                              {isRetrievingArchive && (
-                                <p className="mt-2 text-xs leading-5 text-muted">
-                                  Downloading the master to the working folder. Large camera files
-                                  take a while — progress is in the pipeline console.
-                                </p>
-                              )}
-
-                              {archivePreview?.url && (
-                                <div className="mt-3">
-                                  <video
-                                    key={archivePreview.url}
-                                    src={archivePreview.url}
-                                    controls
-                                    className="w-full rounded-card border border-white/10 bg-black"
-                                  />
-                                  <p className="mt-2 text-xs text-dim">
-                                    This preview link is scoped to this one file and expires in{' '}
-                                    {Math.round(archivePreview.expiresInSeconds / 60)} minutes.
-                                  </p>
-                                </div>
-                              )}
-
-                              {archiveError && (
-                                <div className="mt-3 rounded-card border border-state-danger/30 bg-state-danger/[.12] p-3 text-xs text-state-danger">
-                                  {archiveError}
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <p className="text-xs leading-5 text-muted">
-                              This asset has no archived master in Backblaze B2. Only assets
-                              ingested through the pipeline carry one.
-                            </p>
-                          )}
-                        </div>
-
-                        {(selectedVideo.tags.length > 0 ||
-                          (selectedVideo.playlistTitles?.length ?? 0) > 0 ||
-                          selectedVideo.series) && (
-                          <div className="rounded-[13px] border border-white/[.07] bg-ink-raised p-4">
-                            <p className="mb-3 font-condensed text-overline uppercase text-dim">
-                              Tags
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {selectedVideo.series && (
-                                <span className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-body">
-                                  Series: {selectedVideo.series}
-                                </span>
-                              )}
-                              {(selectedVideo.playlistTitles ?? []).map((playlistTitle) => (
-                                <span
-                                  key={playlistTitle}
-                                  className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-body"
-                                >
-                                  {playlistTitle}
-                                </span>
-                              ))}
-                              {selectedVideo.tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="rounded-[7px] bg-white/[.06] px-2.5 py-1 text-xs text-body"
-                                >
-                                  #{tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                  <div className="flex flex-none items-center gap-1.5">
+                    {publishSummary(video).tags.map((tag) => (
+                      <PlatformTag key={tag.platform} platform={tag.platform} live={tag.live} />
+                    ))}
+                  </div>
+                  <span className="min-w-[90px] flex-none machine text-[11.5px] text-muted">
+                    {publishSummary(video).note}
+                  </span>
+                  <StatusChip status={video.status} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : selectedVideo ? (
+        <div className="flex min-h-0 flex-wrap items-stretch">
+          {/* -------------------------------------------------- the video */}
+          <div className="min-w-[320px] flex-[1_1_520px]">
+            <div className="px-[26px] pt-6">
+              <div className="relative aspect-video overflow-hidden rounded-card border border-rule bg-ink-panel">
+                {previewAvailable ? (
+                  <ErrorBoundary label="The player">
+                    <StoredVideoPlayer video={selectedVideo} />
+                  </ErrorBoundary>
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center p-6">
+                    <div className="max-w-[320px] text-center">
+                      <div className="font-condensed text-[13px] font-bold uppercase tracking-[.12em] text-muted">
+                        {statusLabel(selectedVideo.status)}
                       </div>
-                    )}
-
-                    {inspectorTab === 'metadata' && editorDraft && (
-                      <div className="space-y-5">
-                        <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                          <div className="flex flex-col gap-3">
-                            <div>
-                              <h3 className="text-base font-semibold text-paper">Metadata Editor</h3>
-                              <p className="mt-1 text-xs text-muted">
-                                Publish state, descriptive copy, and library organization all live here.
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                onClick={() => void handleSaveMetadata('draft')}
-                                className="rounded-control border border-state-warn/30 bg-state-warn/[.12] px-3 py-1.5 text-xs font-semibold text-state-warn transition hover:bg-state-warn/15 disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={isSavingMetadata || isDeletingVideo}
-                                type="button"
-                              >
-                                Unpublish
-                              </button>
-                              <button
-                                onClick={() => void handleSaveMetadata('ready')}
-                                className="rounded-control bg-accent px-3 py-1.5 text-xs font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={isSavingMetadata || isDeletingVideo}
-                                type="button"
-                              >
-                                Publish
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          <div>
-                            <label className="mb-2 block font-condensed text-overline uppercase text-dim">
-                              Title
-                            </label>
-                            <input
-                              value={editorDraft.title}
-                              onChange={(event) =>
-                                setEditorDraft((current) =>
-                                  current ? { ...current, title: event.target.value } : current)
-                              }
-                              className={PANEL_INPUT_CLASS}
-                            />
-                          </div>
-
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div>
-                              <label className="mb-2 block font-condensed text-overline uppercase text-dim">
-                                Status
-                              </label>
-                              <select
-                                value={editorDraft.status}
-                                onChange={(event) =>
-                                  setEditorDraft((current) =>
-                                    current
-                                      ? { ...current, status: event.target.value as StoredVideoStatus }
-                                      : current)
-                                }
-                                className={PANEL_INPUT_CLASS}
-                              >
-                                {EDITABLE_STATUS_OPTIONS.map((status) => (
-                                  <option key={status} value={status}>
-                                    {formatStatusLabel(status)}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="mb-2 block font-condensed text-overline uppercase text-dim">
-                                Recorded At
-                              </label>
-                              <input
-                                type="datetime-local"
-                                value={editorDraft.recordedAtInput}
-                                onChange={(event) =>
-                                  setEditorDraft((current) =>
-                                    current ? { ...current, recordedAtInput: event.target.value } : current)
-                                }
-                                className={PANEL_INPUT_CLASS}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                            <p className="font-condensed text-overline uppercase text-dim">
-                              Lawn Workflow
-                            </p>
-                            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                              <div>
-                                <label className="mb-2 block font-condensed text-overline uppercase text-dim">
-                                  Review Status
-                                </label>
-                                <select
-                                  value={editorDraft.reviewStatus}
-                                  onChange={(event) =>
-                                    setEditorDraft((current) =>
-                                      current
-                                        ? { ...current, reviewStatus: event.target.value as ReviewStatus }
-                                        : current)
-                                  }
-                                  className={PANEL_INPUT_CLASS}
-                                >
-                                  {REVIEW_STATUS_OPTIONS.map((status) => (
-                                    <option key={status} value={status}>
-                                      {formatReviewStatusLabel(status)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                            </div>
-                          </div>
-
-                          <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                            <p className="font-condensed text-overline uppercase text-dim">
-                              Ingest Metadata
-                            </p>
-                            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                              {([
-                                ['Project / Client', 'projectName', 'SS26 Launch'],
-                                ['Event / Shoot', 'eventName', 'Championship postgame'],
-                                ['Camera ID', 'cameraId', 'Cam A'],
-                                ['Source Node', 'sourceNode', 'local vMix'],
-                              ] as const).map(([label, key, placeholder]) => (
-                                <div key={key}>
-                                  <label className="mb-2 block font-condensed text-overline uppercase text-dim">
-                                    {label}
-                                  </label>
-                                  <input
-                                    value={editorDraft[key]}
-                                    onChange={(event) =>
-                                      setEditorDraft((current) =>
-                                        current ? { ...current, [key]: event.target.value } : current)
-                                    }
-                                    placeholder={placeholder}
-                                    className={PANEL_INPUT_CLASS}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <SingleValuePicker
-                            label="Series"
-                            value={editorDraft.series}
-                            options={seriesOptions}
-                            placeholder="Friday Night Lights"
-                            onChange={(series) =>
-                              setEditorDraft((current) => (current ? { ...current, series } : current))
-                            }
-                          />
-
-                          <MultiValuePicker
-                            label="Playlists"
-                            values={splitCommaSeparatedValues(editorDraft.playlistInput)}
-                            options={playlistOptions}
-                            placeholder="Top Plays"
-                            onChange={(playlistTitles) =>
-                              setEditorDraft((current) =>
-                                current ? { ...current, playlistInput: playlistTitles.join(', ') } : current)
-                            }
-                          />
-
-                          <MultiValuePicker
-                            label="Tags"
-                            values={splitCommaSeparatedValues(editorDraft.tagsInput)}
-                            options={tagOptions}
-                            placeholder="basketball"
-                            onChange={(tags) =>
-                              setEditorDraft((current) =>
-                                current ? { ...current, tagsInput: tags.join(', ') } : current)
-                            }
-                          />
-
-                          <div>
-                            <label className="mb-2 block font-condensed text-overline uppercase text-dim">
-                              Description
-                            </label>
-                            <textarea
-                              value={editorDraft.description}
-                              onChange={(event) =>
-                                setEditorDraft((current) =>
-                                  current ? { ...current, description: event.target.value } : current)
-                              }
-                              rows={6}
-                              className={PANEL_INPUT_CLASS}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                          <button
-                            onClick={() => void handleSaveMetadata()}
-                            className="w-full rounded-control bg-state-ok px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-state-ok disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isSavingMetadata || isDeletingVideo}
-                            type="button"
-                          >
-                            {isSavingMetadata ? 'Saving...' : 'Save Metadata'}
-                          </button>
-                          <p className="mt-2 text-xs text-muted">
-                            Publish moves the record to <span className="font-semibold text-paper">ready</span>.
-                            Unpublish returns it to <span className="font-semibold text-paper">draft</span>.
-                          </p>
-                        </div>
-
-                        <div className="rounded-card border border-state-danger/30 bg-state-danger/[.12] p-4">
-                          <div className="flex flex-col gap-3">
-                            <div>
-                              <h3 className="text-sm font-semibold text-state-danger">Danger Zone</h3>
-                              <p className="mt-1 text-xs leading-5 text-state-danger/80">
-                                Delete removes this asset from the Convex library and removes linked cloud assets where
-                                available.
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => void handleDeleteVideo()}
-                              className="rounded-control border border-state-danger/30 bg-state-danger/10 px-4 py-2 text-xs font-semibold text-state-danger transition hover:bg-state-danger/15 disabled:cursor-not-allowed disabled:opacity-60 sm:self-start"
-                              disabled={isSavingMetadata || isDeletingVideo}
-                              type="button"
-                            >
-                              {isDeletingVideo ? 'Deleting...' : 'Delete Video'}
-                            </button>
-                          </div>
-                        </div>
+                      <div className="mt-2 text-[13.5px] text-pretty text-body">
+                        {getPreviewUnavailableCopy(selectedVideo.status).body}
                       </div>
-                    )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                    {inspectorTab === 'poster' && (
-                      <div className="space-y-5">
-                        <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                          <div className="flex flex-col gap-3">
-                            <div>
-                              <h3 className="text-base font-semibold text-paper">Poster Image</h3>
-                              <p className="mt-1 text-xs text-muted">
-                                Generate new frame options from the stored playback asset, then push the selected
-                                poster back to cloud storage and Convex.
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => void handleGeneratePosterCandidates()}
-                              className="rounded-control border border-accent/40 bg-accent/[.13] px-4 py-2 text-xs font-semibold text-accent-hi transition hover:bg-accent-hi/15 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={!previewAvailable || !playableSourceUrl || isGeneratingPosterCandidates}
-                              type="button"
-                            >
-                              {isGeneratingPosterCandidates ? 'Generating...' : 'Generate Poster Options'}
-                            </button>
-                          </div>
-                        </div>
+              <div className="mt-3.5 flex flex-wrap items-center gap-[9px]">
+                <GhostButton onClick={() => selectVideoByOffset(-1)}>Previous</GhostButton>
+                <GhostButton onClick={() => selectVideoByOffset(1)}>Next</GhostButton>
+                <span className="min-w-[8px] flex-1" />
+                <span className="machine text-[12px] text-muted">{positionNote}</span>
+              </div>
+            </div>
 
-                        <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                          <p className="font-condensed text-overline uppercase text-dim">
-                            Current Poster
-                          </p>
-                          {selectedVideo.posterUrl ? (
+            <div className="px-[26px] pt-[22px]">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <PageHeading size="detail" title={selectedVideo.title} />
+                <StatusChip status={selectedVideo.status} />
+              </div>
+              {selectedVideo.description ? (
+                <div className="mt-2.5 text-copy text-pretty text-body">
+                  {selectedVideo.description}
+                </div>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap gap-[9px]">
+                <GhostButton onClick={() => setInspectorTab(inspectorTab === 'metadata' ? 'details' : 'metadata')}>
+                  {inspectorTab === 'metadata' ? 'Close details' : 'Edit details'}
+                </GhostButton>
+                {['ready', 'draft', 'archived'].includes(selectedVideo.status) ? (
+                  <GhostButton
+                    disabled={isSavingMetadata}
+                    onClick={() =>
+                      void handleSaveMetadata(selectedVideo.status === 'ready' ? 'draft' : 'ready')
+                    }
+                  >
+                    {selectedVideo.status === 'ready' ? 'Unpublish' : 'Publish'}
+                  </GhostButton>
+                ) : null}
+                <GhostButton
+                  disabled={!previewAvailable || isGeneratingPosterCandidates}
+                  onClick={() => {
+                    if (inspectorTab === 'poster') {
+                      setInspectorTab('details');
+                      return;
+                    }
+                    setInspectorTab('poster');
+                    void handleGeneratePosterCandidates();
+                  }}
+                >
+                  {inspectorTab === 'poster' ? 'Hide thumbnails' : 'Replace thumbnail'}
+                </GhostButton>
+                <GhostButton onClick={() => navigate('/trimmer')}>Trim a clip</GhostButton>
+                {selectedVideo.status === 'archived' ? (
+                  <GhostButton
+                    disabled={isRetrievingArchive}
+                    onClick={() => void handleRetrieveArchive()}
+                  >
+                    {isRetrievingArchive ? 'Fetching…' : 'Get original back'}
+                  </GhostButton>
+                ) : null}
+              </div>
+            </div>
+
+            {inspectorTab === 'poster' ? (
+              <div className="px-[26px] pt-[22px]">
+                <Eyebrow>Pick a thumbnail</Eyebrow>
+                <div className="mt-[7px] text-caption text-pretty text-quiet">
+                  Frames pulled from the finished video. Choosing one replaces the cover image
+                  everywhere.
+                </div>
+                {isGeneratingPosterCandidates ? (
+                  <div className="mt-3 text-[13px] text-quiet">Pulling frames…</div>
+                ) : (
+                  <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+                    {posterCandidates.map((candidate) => {
+                      const isPicked = candidate.localPath === selectedPosterCandidatePath;
+                      return (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() => setSelectedPosterCandidatePath(candidate.localPath)}
+                          className={`block w-full cursor-pointer rounded-card border p-2 text-left ${
+                            isPicked ? 'border-rule-strong bg-ink-raised' : 'border-rule bg-ink-raised hover:border-rule-strong'
+                          }`}
+                        >
+                          <div className="relative aspect-video w-full overflow-hidden rounded-chip bg-ink-chip">
                             <img
-                              src={appendCacheBust(selectedVideo.posterUrl, selectedVideo.updatedAt)}
-                              alt={`${selectedVideo.title} poster`}
-                              className="mt-3 aspect-video w-full rounded-control object-cover"
+                              src={candidate.imageUrl}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-cover"
                             />
-                          ) : (
-                            <div className="mt-3 flex aspect-video items-center justify-center rounded-control border border-dashed border-white/10 font-condensed text-overline uppercase text-dim">
-                              No Poster
-                            </div>
-                          )}
-                        </div>
-
-                        {posterCandidates.length === 0 ? (
-                          <div className="rounded-card border border-dashed border-white/10 p-5 text-xs text-muted">
-                            Generate poster options to review frame candidates here.
+                            <span className="csn-timecode">{candidate.label}</span>
                           </div>
-                        ) : (
-                          <>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {posterCandidates.map((candidate) => {
-                                const isCandidateSelected = candidate.localPath === selectedPosterCandidatePath;
+                          <div
+                            className={`mt-2 font-condensed text-[11.5px] font-bold uppercase tracking-[.08em] ${
+                              isPicked ? 'text-paper' : 'text-quiet'
+                            }`}
+                          >
+                            {isPicked ? 'Selected' : 'Use this frame'}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-[9px]">
+                  <GhostButton
+                    disabled={!selectedPosterCandidate || isApplyingPoster}
+                    onClick={() => void handleApplyPoster()}
+                  >
+                    {isApplyingPoster ? 'Saving…' : 'Use this frame'}
+                  </GhostButton>
+                </div>
+              </div>
+            ) : null}
 
-                                return (
-                                  <button
-                                    key={candidate.id}
-                                    onClick={() => setSelectedPosterCandidatePath(candidate.localPath)}
-                                    type="button"
-                                    className={`overflow-hidden rounded-card border text-left transition ${
-                                      isCandidateSelected
-                                        ? 'border-accent/40 bg-accent/[.13] shadow-[0_14px_32px_rgba(238,21,24,.35)]'
-                                        : 'border-white/10 bg-white/5 hover:border-white/20'
-                                    }`}
-                                  >
-                                    <img
-                                      src={candidate.imageUrl}
-                                      alt={`Poster candidate at ${candidate.label}`}
-                                      className="aspect-video w-full object-cover"
-                                    />
-                                    <div className="p-2.5">
-                                      <p className="font-condensed text-overline uppercase text-dim">
-                                        Candidate
-                                      </p>
-                                      <p className="mt-0.5 text-xs font-semibold text-paper">{candidate.label}</p>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
+            {selectedVideo.errorMessage ? (
+              <div className="px-[26px] pt-[18px]">
+                <ErrorNote>{selectedVideo.errorMessage}</ErrorNote>
+              </div>
+            ) : null}
 
-                            <div className="rounded-card border border-white/10 bg-white/5 p-4">
-                              <button
-                                onClick={() => void handleApplyPoster()}
-                                className="w-full rounded-control bg-accent px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-accent-hi disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={!selectedPosterCandidate || isApplyingPoster}
-                                type="button"
-                              >
-                                {isApplyingPoster ? 'Applying Poster...' : 'Apply Selected Poster'}
-                              </button>
-                              <p className="mt-2 text-xs text-muted">
-                                {selectedPosterCandidate
-                                  ? `Selected frame ${selectedPosterCandidate.label}.`
-                                  : 'Choose a candidate frame before applying the new poster.'}
-                              </p>
-                            </div>
-                          </>
-                        )}
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-[18px] px-[26px] pt-6">
+              <div>
+                <Eyebrow>About</Eyebrow>
+                <div className="mt-2.5">
+                  <FactList>
+                    <Fact label="Series" value={selectedVideo.series || '—'} />
+                    <Fact label="Recorded" value={formatDate(selectedVideo.recordedAt)} />
+                    <Fact label="Duration" value={formatDuration(selectedVideo.durationSeconds)} />
+                    <Fact label="Original file" value={selectedVideo.sourceFileName} />
+                  </FactList>
+                </div>
+              </div>
+              <div>
+                <Eyebrow>The video file</Eyebrow>
+                <div className="mt-2.5">
+                  <FactList>
+                    <Fact machine label="Resolution" value={formatResolution(selectedVideo)} />
+                    <Fact machine label="Frame rate" value={formatFrameRate(selectedVideo.sourceFrameRate)} />
+                    <Fact machine label="File size" value={formatFileSize(selectedVideo.sourceFileSizeBytes)} />
+                    <Fact
+                      machine
+                      label="Delivery"
+                      value={
+                        inferStoredDeliveryType(selectedVideo) === 'hls'
+                          ? 'Streaming (HLS)'
+                          : 'Progressive (MP4)'
+                      }
+                    />
+                    <Fact machine label="Encoded with" value={formatCodec(selectedVideo.encoder)} />
+                  </FactList>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-[26px] px-[26px] pt-[22px]">
+              {selectedVideo.tags.length > 0 ? (
+                <div className="min-w-[180px] flex-[1_1_220px]">
+                  <Eyebrow>Tags</Eyebrow>
+                  <div className="mt-2.5 flex flex-wrap gap-[7px]">
+                    {selectedVideo.tags.map((tag) => (
+                      <span key={tag} className="csn-tag">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {(selectedVideo.playlistTitles ?? []).length > 0 ? (
+                <div className="min-w-[180px] flex-[1_1_220px]">
+                  <Eyebrow>In playlists</Eyebrow>
+                  <div className="mt-2.5 flex flex-wrap gap-[7px]">
+                    {(selectedVideo.playlistTitles ?? []).map((playlist) => (
+                      <span key={playlist} className="csn-tag">
+                        {playlist}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="px-[26px] pt-[22px]">
+              <Eyebrow>Where it is published</Eyebrow>
+              <div className="mt-[7px] text-caption text-pretty text-quiet">
+                Read-only here — scheduling and publishing are done in the CSN web app.
+              </div>
+              {publishSummary(selectedVideo).rows.length > 0 ? (
+                <div className="mt-[11px]">
+                  <FactList>
+                    {publishSummary(selectedVideo).rows.map((row) => (
+                      <div
+                        key={row.platform}
+                        className="csn-hair-row flex flex-wrap items-center gap-3 px-[13px] py-[11px]"
+                      >
+                        <PlatformGlyph platform={row.platform} live={row.live} />
+                        <div className="min-w-[130px] flex-[1_1_160px]">
+                          <div className="truncate text-[13.5px] font-semibold text-paper">
+                            {row.name}
+                          </div>
+                          <div className="mt-0.5 machine text-[11.5px] text-muted">{row.when}</div>
+                        </div>
+                        <ToneChip tone={row.tone}>{row.state}</ToneChip>
+                        {row.url ? (
+                          <a
+                            href={row.url}
+                            className="min-w-[120px] flex-[1_1_180px] truncate machine text-[12px] text-body"
+                          >
+                            {row.url}
+                          </a>
+                        ) : null}
                       </div>
-                    )}
-                  </div>
-                </>
+                    ))}
+                  </FactList>
+                </div>
               ) : (
-                <div className="flex flex-1 items-center justify-center p-6 text-center">
-                  <div className="max-w-sm">
-                    <h3 className="font-display text-section text-paper">No asset selected</h3>
-                    <p className="mt-2 text-xs leading-5 text-muted">
-                      Choose a card from the gallery to open playback, metadata, and poster controls in this panel.
-                    </p>
-                  </div>
+                <div className="mt-[11px] text-[13px] text-pretty text-quiet">
+                  {selectedVideo.status === 'ready' || selectedVideo.status === 'draft'
+                    ? 'Not published anywhere yet. Publishing happens in the CSN web app.'
+                    : 'It will be publishable once processing finishes.'}
                 </div>
               )}
             </div>
-          </aside>
-      </div>
-    </div>
+
+            <div className="px-[26px] pt-[22px]">
+              <Eyebrow>Links</Eyebrow>
+              {videoLinks(selectedVideo).length > 0 ? (
+                <div className="mt-2.5">
+                  <FactList>
+                    {videoLinks(selectedVideo).map((link) => (
+                      <div
+                        key={link.label}
+                        className="csn-hair-row flex flex-wrap items-center gap-3.5 px-3.5 py-[11px]"
+                      >
+                        <span className="w-[100px] flex-none text-caption text-quiet">
+                          {link.label}
+                        </span>
+                        <a
+                          href={link.url}
+                          className="min-w-[120px] flex-[1_1_180px] truncate machine text-caption text-body"
+                        >
+                          {link.url}
+                        </a>
+                        <GhostButton
+                          onClick={() => {
+                            void navigator.clipboard.writeText(link.url);
+                            flash(`${link.label} copied`);
+                          }}
+                        >
+                          Copy
+                        </GhostButton>
+                      </div>
+                    ))}
+                  </FactList>
+                </div>
+              ) : (
+                <div className="mt-2.5 text-[13px] text-quiet">
+                  Links appear once this video finishes processing.
+                </div>
+              )}
+            </div>
+
+            {derivedClips.length > 0 ? (
+              <div className="px-[26px] pt-[22px]">
+                <SectionHead title="CLIPS FROM THIS VIDEO" note={`${derivedClips.length}`} size="sm" />
+                <div className="csn-hair mt-2.5">
+                  {derivedClips.map((clip) => (
+                    <button
+                      key={clip._id}
+                      type="button"
+                      onClick={() => openVideo(clip._id)}
+                      className="csn-hair-row flex w-full cursor-pointer flex-wrap items-center gap-3 border-none px-3.5 py-[11px] text-left hover:bg-ink-tile"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[13.5px] text-paper">
+                        {clip.title}
+                      </span>
+                      <span className="machine text-[11.5px] text-muted">
+                        {formatDuration(clip.durationSeconds)}
+                      </span>
+                      <StatusChip status={clip.status} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* ------------------------------------------- the machine half */}
+            <div className="px-[26px] pt-[22px]">
+              <Disclosure
+                open={inspectorTab === 'details' && storageOpen}
+                onToggle={() => {
+                  setInspectorTab('details');
+                  setStorageOpen((open) => !open);
+                }}
+                showLabel="Show storage details"
+                hideLabel="Hide storage details"
+              />
+            </div>
+
+            {storageOpen && inspectorTab === 'details' ? (
+              <div className="px-[26px] pt-3.5">
+                <FactList>
+                  <Fact wide machine label="Archive key" value={selectedVideo.archiveObjectKey || '—'} />
+                  <Fact
+                    wide
+                    machine
+                    label="Playback folder"
+                    value={selectedVideo.distributionObjectKey || '—'}
+                  />
+                  <Fact wide machine label="Added" value={formatDate(selectedVideo.createdAt)} />
+                  <Fact wide machine label="Last changed" value={formatDate(selectedVideo.updatedAt)} />
+                </FactList>
+
+                {archiveError ? (
+                  <div className="mt-3">
+                    <ErrorNote>{archiveError}</ErrorNote>
+                  </div>
+                ) : null}
+                {archivePreview?.url ? (
+                  <div className="mt-3">
+                    <QuietNote>
+                      <a href={archivePreview.url} className="machine break-all underline">
+                        {archivePreview.url}
+                      </a>{' '}
+                      — expires in {archivePreview.expiresInSeconds}s.
+                    </QuietNote>
+                  </div>
+                ) : null}
+
+                <div className="mt-3.5 flex flex-wrap gap-[9px]">
+                  <GhostButton
+                    disabled={!selectedVideo.archiveObjectKey || isLoadingArchivePreview}
+                    onClick={() => void handlePreviewArchive()}
+                  >
+                    {isLoadingArchivePreview ? 'Opening…' : 'Preview the original'}
+                  </GhostButton>
+                  <GhostButton
+                    disabled={!hasConvexConfig || isRepairingUrls}
+                    onClick={() => void handleRepairStoredUrls()}
+                  >
+                    {isRepairingUrls ? 'Repairing…' : 'Repair links'}
+                  </GhostButton>
+                  <GhostButton onClick={() => setRefreshKey((current) => current + 1)}>
+                    Refresh
+                  </GhostButton>
+                  <GhostButton disabled={isDeletingVideo} onClick={() => void handleDeleteVideo()}>
+                    {isDeletingVideo ? 'Deleting…' : 'Delete this video'}
+                  </GhostButton>
+                </div>
+
+                <div className="mt-5">
+                  <Eyebrow>Narrow the list</Eyebrow>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <FilterChipGroup
+                      label="Status"
+                      options={STATUS_CHIP_OPTIONS}
+                      value={statusFilter}
+                      onChange={(value) => setStatusFilter(value)}
+                      renderLabel={(option) => (option === 'all' ? 'All' : formatStatusLabel(option))}
+                    />
+                    <FilterChipGroup
+                      label="Type"
+                      options={CONTENT_TYPE_CHIP_OPTIONS}
+                      value={contentTypeFilter}
+                      onChange={(value) => setContentTypeFilter(value)}
+                      renderLabel={(option) =>
+                        option === 'all' ? 'All' : formatContentTypeLabel(option)
+                      }
+                    />
+                    <FilterChipGroup
+                      label="Delivery"
+                      options={DELIVERY_CHIP_OPTIONS}
+                      value={deliveryFilter}
+                      onChange={(value) => setDeliveryFilter(value)}
+                      renderLabel={(option) => (option === 'all' ? 'All' : formatDeliveryLabel(option))}
+                    />
+                    <SeriesFilter
+                      videos={videos}
+                      value={collectionParam}
+                      onChange={(next) => setCollectionFilter(next)}
+                    />
+                    {collectionParam ? (
+                      <GhostButton onClick={clearCollectionFilter}>Clear playlist</GhostButton>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {inspectorTab === 'metadata' && editorDraft ? (
+              <div className="px-[26px] pt-[22px]">
+                <Eyebrow>Edit details</Eyebrow>
+                <div className="mt-3 flex flex-col gap-3.5">
+                  <label className="block">
+                    <span className="csn-label">Title</span>
+                    <input
+                      value={editorDraft.title}
+                      onChange={(event) =>
+                        setEditorDraft({ ...editorDraft, title: event.target.value })
+                      }
+                      className="csn-input"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="csn-label">Description</span>
+                    <textarea
+                      rows={3}
+                      value={editorDraft.description}
+                      onChange={(event) =>
+                        setEditorDraft({ ...editorDraft, description: event.target.value })
+                      }
+                      className="csn-textarea"
+                    />
+                  </label>
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3.5">
+                    <SingleValuePicker
+                      label="Series"
+                      onChange={(next) => setEditorDraft({ ...editorDraft, series: next })}
+                      options={seriesOptions}
+                      placeholder="Midweek"
+                      value={editorDraft.series}
+                    />
+                    <MultiValuePicker
+                      label="Playlists"
+                      onChange={(next) =>
+                        setEditorDraft({ ...editorDraft, playlistInput: next.join(', ') })
+                      }
+                      options={playlistOptions}
+                      placeholder="2026 Season"
+                      values={splitCommaSeparatedValues(editorDraft.playlistInput)}
+                    />
+                    <MultiValuePicker
+                      label="Tags"
+                      onChange={(next) =>
+                        setEditorDraft({ ...editorDraft, tagsInput: next.join(', ') })
+                      }
+                      options={tagOptions}
+                      placeholder="baseball"
+                      values={splitCommaSeparatedValues(editorDraft.tagsInput)}
+                    />
+                    <label className="block">
+                      <span className="csn-label">Recorded</span>
+                      <input
+                        type="datetime-local"
+                        value={editorDraft.recordedAtInput}
+                        onChange={(event) =>
+                          setEditorDraft({ ...editorDraft, recordedAtInput: event.target.value })
+                        }
+                        className="csn-input"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="csn-label">Event</span>
+                      <input
+                        value={editorDraft.eventName}
+                        onChange={(event) =>
+                          setEditorDraft({ ...editorDraft, eventName: event.target.value })
+                        }
+                        className="csn-input"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="csn-label">Project</span>
+                      <input
+                        value={editorDraft.projectName}
+                        onChange={(event) =>
+                          setEditorDraft({ ...editorDraft, projectName: event.target.value })
+                        }
+                        className="csn-input"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="csn-label">Camera</span>
+                      <input
+                        value={editorDraft.cameraId}
+                        onChange={(event) =>
+                          setEditorDraft({ ...editorDraft, cameraId: event.target.value })
+                        }
+                        className="csn-input"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="csn-label">Recorded on</span>
+                      <input
+                        value={editorDraft.sourceNode}
+                        onChange={(event) =>
+                          setEditorDraft({ ...editorDraft, sourceNode: event.target.value })
+                        }
+                        className="csn-input"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="csn-label">Review</span>
+                      <select
+                        value={editorDraft.reviewStatus}
+                        onChange={(event) =>
+                          setEditorDraft({
+                            ...editorDraft,
+                            reviewStatus: event.target.value as ReviewStatus,
+                          })
+                        }
+                        className="csn-select w-full"
+                      >
+                        {REVIEW_STATUS_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {formatReviewStatusLabel(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="csn-label">State</span>
+                      <select
+                        value={editorDraft.status}
+                        onChange={(event) =>
+                          setEditorDraft({
+                            ...editorDraft,
+                            status: event.target.value as StoredVideoStatus,
+                          })
+                        }
+                        className="csn-select w-full"
+                      >
+                        {EDITABLE_STATUS_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {formatStatusLabel(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-[9px]">
+                    <GhostButton
+                      disabled={isSavingMetadata}
+                      onClick={() => void handleSaveMetadata()}
+                    >
+                      {isSavingMetadata ? 'Saving…' : 'Save details'}
+                    </GhostButton>
+                    <GhostButton onClick={() => setEditorDraft(buildEditorDraft(selectedVideo))}>
+                      Undo changes
+                    </GhostButton>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="h-10" />
+          </div>
+
+          {/* --------------------------------------------------- the rail */}
+          <div className="flex min-w-[260px] flex-[0_1_312px] flex-col border-l border-rule">
+            <div className="px-5 pt-5">
+              <Eyebrow>
+                {isLoading
+                  ? 'Refreshing…'
+                  : `${filteredVideos.length} video${filteredVideos.length === 1 ? '' : 's'}`}
+              </Eyebrow>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-5 pb-10 pt-3.5">
+              {filteredVideos.map((video) => {
+                const isCurrent = video._id === selectedVideo._id;
+                return (
+                  <button
+                    key={video._id}
+                    type="button"
+                    onClick={() => setSelectedVideoId(video._id)}
+                    className={`flex w-full cursor-pointer items-center gap-[11px] rounded-card border p-[7px] text-left transition-colors ${
+                      isCurrent
+                        ? 'border-rule-strong bg-ink-chip'
+                        : 'border-transparent hover:bg-ink-tile'
+                    }`}
+                  >
+                    <Thumb
+                      seed={video._id}
+                      posterUrl={appendCacheBust(video.posterUrl, video.updatedAt)}
+                      showPlay={isCurrent}
+                      className="aspect-video w-[76px] flex-none rounded-chip"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className={`truncate text-[13px] font-semibold ${
+                          isCurrent ? 'text-paper' : 'text-body'
+                        }`}
+                      >
+                        {video.title}
+                      </div>
+                      <div className="mt-[3px] truncate machine text-[11.5px] text-muted">
+                        {formatDuration(video.durationSeconds)} · {statusLabel(video.status)}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <Toast message={toast} />
+    </Screen>
   );
 }

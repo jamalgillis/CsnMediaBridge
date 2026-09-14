@@ -49,24 +49,29 @@ module.exports = {
         display: ['40px', { lineHeight: '1', letterSpacing: '0.01em' }],
       },
       borderRadius: {
-        // The site rounds to 2–3px on micro badges, --radius (0.5rem) on cards
-        // and media, and full on chips and buttons.
-        chip: '4px',
-        badge: '3px',
-        control: '6px',
-        card: '8px',
-        bubble: '8px',
-        panel: '8px',
+        // CSN v2 is a squared-off system: 2px on controls, chips, badges and
+        // toggles; 3px on cards and panels. Nothing is rounder than 3px except
+        // the DS's own capsule chips and buttons, which stay `rounded-full`.
+        chip: '2px',
+        badge: '2px',
+        control: '2px',
+        card: '3px',
+        bubble: '3px',
+        panel: '3px',
       },
       spacing: {
-        rail: '248px',
-        topbar: '64px', // matches the site header row (h-16)
+        // Bridge runs a narrower rail than the web app's 248px, and its window
+        // chrome is a 38px title bar rather than a 64px site header.
+        rail: '206px',
+        titlebar: '38px',
         control: '38px',
       },
       height: {
         control: '38px',
+        chip: '34px',
+        inline: '30px',
         hit: '44px',
-        topbar: '64px',
+        titlebar: '38px',
       },
       boxShadow: {
         pop: '0 18px 50px rgba(0, 0, 0, 0.6)',
@@ -75,6 +80,10 @@ module.exports = {
         // The site marks the active nav item with an inset accent underline.
         nav: 'inset 0 -3px 0 0 #ee1518',
         tab: 'inset 0 -2px 0 0 #ee1518',
+        // Live status chips sit on ink inside a 1px inset accent ring rather
+        // than on a tinted fill — see design.md §2, "Status chip".
+        live: 'inset 0 0 0 1px #ee1518',
+        rule: 'inset 0 0 0 1px rgba(255, 255, 255, 0.16)',
       },
       backgroundImage: {
         mark: 'linear-gradient(135deg, #ee1518, #7a0a0c)',

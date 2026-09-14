@@ -114,7 +114,7 @@ This is how the app tells your backend that a VOD is ready.
 
 Click `Save Configuration`.
 
-The app will store these settings for future launches. Secret values are stored in the Electron settings store and protected with OS-backed safe storage when available.
+The app will store these settings for future launches. They are written to the OS application-support directory, readable only by your user account.
 
 ## Step 9. Check System Readiness
 

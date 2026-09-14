@@ -30,7 +30,7 @@ The application will provide:
 
 ## Deliverables
 
-- cross-platform Electron desktop application
+- cross-platform Tauri desktop application
 - React-based operator interface
 - configurable ingest, library, offload, trimmer, and settings views
 - cloud integration for Backblaze B2 and Cloudflare R2
@@ -41,11 +41,11 @@ The application will provide:
 
 ## Technical Approach
 
-- Electron for desktop packaging and native system integration
+- Tauri for desktop packaging and native system integration
 - React for UI workflows
 - FFmpeg and ffprobe for media processing and inspection
 - `rclone` for cloud transfer and verification workflows
-- Electron Store for local configuration persistence
+- JSON configuration persisted under the OS application-support directory
 - Convex for backend media registration and metadata workflows
 
 ## Success Criteria

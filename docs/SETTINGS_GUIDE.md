@@ -436,7 +436,7 @@ Example:
 }
 ```
 - trims accidental extra spaces from the values
-- protects secret values with Electron safe storage when the operating system supports it
+- keeps secret values in the OS application-support directory, readable only by your user account
 - refreshes the watcher state so the new settings take effect
 
 ## Recommended Starting Choices

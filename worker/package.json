@@ -1,0 +1,16 @@
+{
+  "name": "csn-credential-broker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mints short-lived, scoped storage credentials for CSN Media Bridge stations.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250906.0",
+    "typescript": "~5.4.5",
+    "wrangler": "^4.35.0"
+  }
+}

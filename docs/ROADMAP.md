@@ -8,6 +8,8 @@ specified and built. See `MEDIA_PIPELINE_ARCHITECTURE.md` for the design,
 phased delivery plan that supersedes the sequencing notes at the end of this
 document.
 
+For white-labeled product planning, see `WHITE_LABEL_AUTH_STRATEGY.md`.
+
 Current focus:
 
 - preserve the app's strong ingest and offload foundation

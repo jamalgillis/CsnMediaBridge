@@ -82,6 +82,10 @@ export type StorageTaskReason =
 export type LiveStreamProvider = 'cloudflare_stream';
 
 export type LiveStreamHandoffJobStatus =
+  /** The live input is not assigned to a client yet. Waits for a person. */
+  | 'needs_client'
+  /** Assigned; the stream provider is still preparing the recording file. */
+  | 'awaiting_source'
   | 'pending'
   | 'claimed'
   | 'downloading'
@@ -121,6 +125,66 @@ export interface LiveStreamHandoffJobSnapshot {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  /** Which client the recording belongs to, for telling them apart in the queue. */
+  clientName?: string;
+  ownerOrgSlug?: string;
+}
+
+/** A recording held in Cloudflare Stream, as the library describes it. */
+export interface StreamRecording {
+  uid: string;
+  name: string | null;
+  createdAt: string | null;
+  durationSeconds: number | null;
+  sizeBytes: number | null;
+  liveInputId: string | null;
+  /** The client its live input is assigned to; null when unassigned. */
+  clientName: string | null;
+  ownerOrgSlug: string | null;
+  thumbnailUrl: string | null;
+  readyToStream: boolean;
+}
+
+export interface StreamRecordingPage {
+  recordings: StreamRecording[];
+  /** Pass back as `before` for the next, older page. Null at the end. */
+  nextBefore: string | null;
+}
+
+export interface ListStreamRecordingsRequest {
+  before?: string | null;
+  search?: string | null;
+  /** Only recordings that came from a live input. Defaults to true. */
+  liveOnly?: boolean;
+}
+
+export type StreamTransferKind = 'archive' | 'download';
+
+export type StreamTransferStatus =
+  | 'preparing'
+  | 'transferring'
+  | 'verifying'
+  | 'done'
+  | 'failed'
+  | 'canceled';
+
+export interface StreamTransferSnapshot {
+  uid: string;
+  kind: StreamTransferKind;
+  title: string;
+  clientName: string | null;
+  status: StreamTransferStatus;
+  message: string | null;
+  /** Stream's own progress while it packages the MP4, 0–100. */
+  percentPrepared: number;
+  bytesDone: number;
+  bytesTotal: number | null;
+  /** The archive object key, or the file path on this machine. */
+  destination: string;
+  errorMessage: string | null;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt?: string;
 }
 
 export interface LiveStreamHandoffWorkerWakeResult {
@@ -240,6 +304,32 @@ export interface OffloadSettings {
   localFolder: string;
   b2PathPrefix: string;
   localCopyMode: OffloadLocalCopyMode;
+  /** Save a smaller webp copy of every photo next to the originals. */
+  convertImagesToWebp: boolean;
+  /** Upload the photos only. Video always stays on the offload drive. */
+  uploadImagesToCloud: boolean;
+}
+
+/**
+ * Where the station asks for short-lived storage credentials.
+ *
+ * With a broker configured the station never holds the master B2 and R2 keys;
+ * it receives credentials scoped to one bucket and prefix that expire within
+ * hours. Leaving it empty keeps the existing behaviour, with the keys below
+ * entered per station.
+ */
+export interface BrokerSettings {
+  url: string;
+  /** Identifies this station to the broker. Low privilege: it can only ask. */
+  token: string;
+  /**
+   * Stream playback through the broker instead of the public bucket.
+   *
+   * Off by default. Turning it on before the broker is deployed stops every
+   * video playing, and the CSN sports web app reads the same objects — so the
+   * bucket can only actually be made private once both are moved.
+   */
+  streamMedia: boolean;
 }
 
 export interface AppUpdateSettings {
@@ -280,6 +370,39 @@ export interface StoredVideoSource {
   objectKey: string;
 }
 
+/** Operator sign-in, as the host reports it. Never carries a token. */
+export type AuthStatus = 'unconfigured' | 'signed-out' | 'signed-in';
+
+export interface AuthPerson {
+  id: string | null;
+  name: string;
+  email: string | null;
+}
+
+/** A Clerk Organization. CSN calls them teams. */
+export interface AuthTeam {
+  id: string;
+  name: string;
+  slug: string | null;
+}
+
+export interface AuthSnapshot {
+  status: AuthStatus;
+  person: AuthPerson | null;
+  team: AuthTeam | null;
+}
+
+/**
+ * Where operator sign-in points. Public values, so a white-label build can be
+ * retargeted at a different Clerk instance without a rebuild.
+ */
+export interface AuthSettings {
+  /** Clerk Frontend API origin, e.g. https://accounts.example.com */
+  issuer: string;
+  /** The OAuth application's client id from the Clerk dashboard. */
+  clientId: string;
+}
+
 export interface AppSettings {
   watchFolder: string;
   tempOutputPath: string;
@@ -288,6 +411,8 @@ export interface AppSettings {
   autoCleanupTempFiles: boolean;
   autoFallbackToSoftware: boolean;
   extractPosterFrame: boolean;
+  /** Build the sprite sheets that power scrub previews. */
+  generateScrubThumbnails: boolean;
   verifyUploads: boolean;
   enableNotifications: boolean;
   uploadConcurrency: number;
@@ -300,6 +425,18 @@ export interface AppSettings {
   convex: ConvexSettings;
   offload: OffloadSettings;
   appUpdates: AppUpdateSettings;
+  auth: AuthSettings;
+  broker: BrokerSettings;
+  liveRecordings: LiveRecordingSettings;
+}
+
+export interface LiveRecordingSettings {
+  /**
+   * Take finished live recordings from the queue without anyone pressing
+   * Convert. Off by default: only a station someone has chosen should start
+   * pulling multi-gigabyte recordings on its own.
+   */
+  autoConvert: boolean;
 }
 
 export interface StorageSettings {
@@ -316,6 +453,10 @@ export interface DependencyStatus {
   ffmpegAvailable: boolean | null;
   ffprobeAvailable: boolean | null;
   rcloneAvailable: boolean | null;
+  ffmpegPath?: string | null;
+  ffprobePath?: string | null;
+  rclonePath?: string | null;
+  r2PublicBaseUrl?: string | null;
   internetReachable: boolean | null;
   watcherHealthy: boolean | null;
   lastCheckedAt: string | null;
@@ -384,6 +525,10 @@ export interface IngestJobSnapshot {
   scheduledPublishAt: string | null;
   sidecarPath: string | null;
   errorMessage: string | null;
+  /** How many automatic retries this job has already used. */
+  retryAttempt?: number;
+  /** When the next automatic retry is due, if one is scheduled. */
+  nextRetryAt?: string | null;
 }
 
 export interface StoredVideoSnapshot {
@@ -430,12 +575,20 @@ export interface StoredVideoSnapshot {
   clipAspectRatio?: ClipAspectRatio;
   clipInSeconds?: number;
   clipOutSeconds?: number;
+  /**
+   * WebVTT storyboard for scrub previews.
+   *
+   * Derived by the host from the playback package rather than stored in the
+   * library, so the schema the CSN web app shares stays unchanged.
+   */
+  thumbnailsUrl?: string;
 }
 
 export interface ManualIntakeSourceSnapshot {
   sourcePath: string;
   sourceFileName: string;
   fileSizeBytes: number;
+  durationSeconds?: number | null;
   modifiedAt: string;
 }
 

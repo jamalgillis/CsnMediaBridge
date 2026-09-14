@@ -28,7 +28,18 @@ const DEFAULT_OFFLOAD_B2_PATH_PREFIX =
     ? __CSN_OFFLOAD_B2_PATH_PREFIX__
     : 'offloads';
 
+const DEFAULT_AUTH_ISSUER =
+  typeof __CLERK_OAUTH_ISSUER__ === 'string' ? __CLERK_OAUTH_ISSUER__ : '';
+const DEFAULT_AUTH_CLIENT_ID =
+  typeof __CLERK_OAUTH_CLIENT_ID__ === 'string' ? __CLERK_OAUTH_CLIENT_ID__ : '';
+
+const DEFAULT_BROKER_URL =
+  typeof __CSN_BROKER_URL__ === 'string' ? __CSN_BROKER_URL__ : '';
+
 export const defaultSettings: AppSettings = {
+  liveRecordings: {
+    autoConvert: false,
+  },
   watchFolder: '',
   tempOutputPath: '',
   hardwareEncoderOverride: 'auto',
@@ -36,6 +47,7 @@ export const defaultSettings: AppSettings = {
   autoCleanupTempFiles: true,
   autoFallbackToSoftware: true,
   extractPosterFrame: true,
+  generateScrubThumbnails: true,
   verifyUploads: true,
   enableNotifications: true,
   uploadConcurrency: 10,
@@ -69,6 +81,17 @@ export const defaultSettings: AppSettings = {
     localFolder: '',
     b2PathPrefix: DEFAULT_OFFLOAD_B2_PATH_PREFIX,
     localCopyMode: 'fast',
+    convertImagesToWebp: true,
+    uploadImagesToCloud: false,
+  },
+  auth: {
+    issuer: DEFAULT_AUTH_ISSUER,
+    clientId: DEFAULT_AUTH_CLIENT_ID,
+  },
+  broker: {
+    url: DEFAULT_BROKER_URL,
+    token: '',
+    streamMedia: false,
   },
   appUpdates: {
     enabled: Boolean(DEFAULT_APP_UPDATE_BASE_URL),

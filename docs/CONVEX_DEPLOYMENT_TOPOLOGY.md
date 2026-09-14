@@ -109,7 +109,7 @@ the way in:
 beside a `content` table that holds videos is a standing invitation to write to
 the wrong one.
 
-Field names inside the media tables stay camelCase. The Electron client and its
+Field names inside the media tables stay camelCase. The desktop client and its
 shared TypeScript types already speak camelCase across roughly fifteen thousand
 lines; converting them would be a mechanical mass-rename with real regression
 risk and no functional benefit. **The boundary is the table**: editorial tables

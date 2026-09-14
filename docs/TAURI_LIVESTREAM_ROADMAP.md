@@ -1,7 +1,7 @@
 # Tauri And Livestream Handoff Roadmap
 
 This document lays out a practical path for rebuilding CSN Media Bridge as a
-Tauri desktop app while preserving the current Electron app's workflow and
+Tauri desktop app while preserving the original Electron app's workflow and
 adding a Convex-backed live stream handoff queue.
 
 Last reviewed: September 10, 2026
@@ -51,8 +51,12 @@ Convex VOD/media registration
 
 ## Current App Baseline
 
-The existing app is an Electron, React, Tailwind, TypeScript desktop app. The
-current desktop shell owns native work through Electron main-process services:
+> **Historical.** This roadmap was written during the migration. The Electron
+> shell described below has since been removed; the Tauri host is the only host.
+> See `docs/TAURI_ARCHITECTURE.md` for where things actually stand.
+
+The app was an Electron, React, Tailwind, TypeScript desktop app. That shell
+owned native work through main-process services:
 
 | Current area | Current implementation | Tauri destination |
 | --- | --- | --- |

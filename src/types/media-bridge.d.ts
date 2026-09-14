@@ -1,4 +1,5 @@
 import type {
+  AuthSnapshot,
   ApplyStoredVideoPosterRequest,
   ArchivePreviewRequest,
   ArchivePreviewResult,
@@ -16,6 +17,10 @@ import type {
   LocalTrimSourceSnapshot,
   LiveStreamHandoffJobSnapshot,
   LiveStreamHandoffWorkerWakeResult,
+  ListStreamRecordingsRequest,
+  StreamRecording,
+  StreamRecordingPage,
+  StreamTransferSnapshot,
   ManualIntakeRequest,
   ManualIntakeSourceSnapshot,
   OffloadSourceSnapshot,
@@ -72,6 +77,21 @@ export interface MediaBridgeApi {
   getStorageUsage: () => Promise<StorageUsageSnapshot | null>;
   listLiveStreamHandoffJobs: () => Promise<LiveStreamHandoffJobSnapshot[]>;
   wakeLiveStreamHandoffWorker: () => Promise<LiveStreamHandoffWorkerWakeResult>;
+  convertLiveStreamRecording: (handoffJobId: string) => Promise<LiveStreamHandoffWorkerWakeResult>;
+  listStreamRecordings: (request: ListStreamRecordingsRequest) => Promise<StreamRecordingPage>;
+  listArchivedStreamUids: () => Promise<string[]>;
+  archiveStreamRecording: (recording: StreamRecording) => Promise<StreamTransferSnapshot>;
+  /** Resolves to null when the operator closes the save dialog. */
+  downloadStreamRecording: (recording: StreamRecording) => Promise<StreamTransferSnapshot | null>;
+  cancelStreamTransfer: (uid: string) => Promise<void>;
+  dismissStreamTransfer: (uid: string) => Promise<void>;
+  listStreamTransfers: () => Promise<StreamTransferSnapshot[]>;
+  onStreamTransfersUpdate: (listener: (transfers: StreamTransferSnapshot[]) => void) => () => void;
+  authStatus: () => Promise<AuthSnapshot>;
+  authSignIn: () => Promise<AuthSnapshot>;
+  authSignOut: () => Promise<AuthSnapshot>;
+  authGetToken: () => Promise<string | null>;
+  onAuthUpdate: (listener: (snapshot: AuthSnapshot) => void) => () => void;
   onStateUpdate: (listener: (state: BridgeStateSnapshot) => void) => () => void;
   onOffloadUpdate: (listener: (task: OffloadTaskSnapshot) => void) => () => void;
   onLiveStreamHandoffUpdate: (

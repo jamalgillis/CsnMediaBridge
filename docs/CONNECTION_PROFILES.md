@@ -21,9 +21,10 @@ Profiles intentionally exclude:
 - R2 access key id
 - R2 secret access key
 
-Those secrets still need to be issued per workstation. In Electron they are
-stored with Electron safe storage when available. In the Tauri migration they
-should move from JSON settings into the OS keychain before production rollout.
+Those secrets still need to be issued per workstation. Today they sit in the
+settings JSON under the OS application-support directory, readable only by the
+signed-in user account. They should move into the OS keychain before production
+rollout.
 
 ## Operator Flow
 

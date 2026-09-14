@@ -41,7 +41,7 @@ export function resolveDeliveryType(params: {
   const thresholdSeconds =
     params.autoProgressiveMaxDurationSeconds ?? AUTO_PROGRESSIVE_MAX_DURATION_SECONDS;
 
-  return durationSeconds <= thresholdSeconds ? 'progressive' : 'hls';
+  return durationSeconds > 0 && durationSeconds <= thresholdSeconds ? 'progressive' : 'hls';
 }
 
 export function inferStoredDeliveryType(asset: {
