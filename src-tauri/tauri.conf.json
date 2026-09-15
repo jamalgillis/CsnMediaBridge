@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CSN Media Bridge",
+  "productName": "Media Bridge",
   "version": "1.0.0",
-  "identifier": "com.gfamagency.csnmediabridge",
+  "identifier": "com.gfamagency.mediabridge",
   "build": {
     "beforeDevCommand": "pnpm run renderer:dev",
     "beforeBuildCommand": "pnpm run renderer:build",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "CSN Media Bridge",
+        "title": "Media Bridge",
         "width": 1560,
         "height": 980,
         "minWidth": 1180,
@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' asset:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data: blob: http: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* https:; media-src 'self' asset: blob: http: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     }
   },
   "bundle": {
@@ -40,7 +40,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://downloads.example.com/csn-media-bridge/latest.json"
+        "https://jamalgillis.github.io/CsnMediaBridge/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3RkZDM0UzNUZDQzcwQQpSV1FLeC93MVB2eC9DeXIvTE81VFhhV1pvZ0U0QUpCMENFVDNpbkpqSkI0Zldzb3RQaHMvV0xHbgo=",
       "windows": {

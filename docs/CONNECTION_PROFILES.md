@@ -21,10 +21,9 @@ Profiles intentionally exclude:
 - R2 access key id
 - R2 secret access key
 
-Those secrets still need to be issued per workstation. Today they sit in the
-settings JSON under the OS application-support directory, readable only by the
-signed-in user account. They should move into the OS keychain before production
-rollout.
+Those secrets still need to be issued per workstation. They are stored in the
+OS keychain/Credential Manager, while `settings.json` keeps only non-secret
+configuration.
 
 ## Operator Flow
 

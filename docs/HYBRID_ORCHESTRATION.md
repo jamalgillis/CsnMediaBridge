@@ -66,7 +66,7 @@ Existing tables keep their current roles:
 7. The desktop uploads the rendered MP4 to Cloudflare R2:
    - `staging/social/{renderJobId}/render.mp4`
    - `scheduled/social/{renderJobId}/render.mp4`
-   - `streaming/social/{renderJobId}/render.mp4`
+   - `videos/{assetKey}/social-{renderJobId}.mp4`
 8. The desktop calls `media/orchestration:completeRenderJob`, which creates a
    `social_renders` record and marks the render job `ready`.
 9. The Asset Manager subscribes to `render_jobs`, `social_renders`, `desktop_nodes`, and

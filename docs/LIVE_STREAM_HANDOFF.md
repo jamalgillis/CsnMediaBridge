@@ -273,15 +273,15 @@ Live handoff output should match normal long-form ingest:
 
 - delivery type: `hls`
 - content type: `vod`
-- R2 playback layout: `streaming/vod/{assetKey}/`
+- R2 playback layout: `videos/{assetKey}/`
 - R2 poster layout: `posters/{assetKey}/`
 - B2 master layout: `masters/{project}/{date}/{assetKey}/{sourceName}`
 - playback files:
   - `master.m3u8`
   - `manifest.mpd`
-  - variant playlists
-  - `init_0.mp4`
-  - `.m4s` segments
+  - variant playlists such as `video/1080p_6000k/stream.m3u8`
+  - init files such as `video/1080p_6000k/init.mp4`
+  - segments such as `video/1080p_6000k/chunk_00001.m4s`
 - Convex media record includes the same playback, manifest, archive, poster,
   encoder, duration, source size, project, event, and status fields used by
   watch-folder ingest

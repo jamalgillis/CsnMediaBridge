@@ -23,7 +23,8 @@ export const ASSET_KEY_LENGTH = 16;
 export const MASTERS_PREFIX = 'masters';
 export const OFFLOADS_PREFIX = 'offloads';
 export const STILLS_PREFIX = 'stills';
-export const STREAMING_PREFIX = 'streaming/vod';
+export const STREAMING_PREFIX = 'videos';
+const LEGACY_STREAMING_PREFIX = 'streaming/vod';
 export const POSTERS_PREFIX = 'posters';
 export const STAGING_SOCIAL_PREFIX = 'staging/social';
 export const SCHEDULED_SOCIAL_PREFIX = 'scheduled/social';
@@ -124,7 +125,7 @@ export function buildMasterSidecarKey(params: Omit<MasterKeyParams, 'originalFil
   );
 }
 
-/** `streaming/vod/{assetKey}` — the directory the playback package uploads into. */
+/** `videos/{assetKey}` — the directory the playback package uploads into. */
 export function buildStreamingPrefix(assetKey: string) {
   return joinKey(STREAMING_PREFIX, assetKey);
 }
@@ -208,17 +209,20 @@ export function isCanonicalKey(objectKey: string | null | undefined) {
 }
 
 /**
- * Recovers the asset key from a canonical streaming prefix.
+ * Recovers the asset key from the canonical persistent video prefix.
  * Returns `null` for legacy keys, whose layout carries no asset key.
  */
 export function assetKeyFromStreamingPrefix(distributionObjectKey: string | null | undefined) {
   const normalized = (distributionObjectKey ?? '').replace(/^\/+|\/+$/g, '');
-  if (!normalized.startsWith(`${STREAMING_PREFIX}/`)) {
-    return null;
+
+  for (const prefix of [STREAMING_PREFIX, LEGACY_STREAMING_PREFIX]) {
+    if (normalized.startsWith(`${prefix}/`)) {
+      const [assetKey] = normalized.slice(prefix.length + 1).split('/');
+      return assetKey?.trim() ? assetKey : null;
+    }
   }
 
-  const [assetKey] = normalized.slice(STREAMING_PREFIX.length + 1).split('/');
-  return assetKey?.trim() ? assetKey : null;
+  return null;
 }
 
 /**

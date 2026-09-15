@@ -133,7 +133,7 @@ export function applyConnectionProfile(
 
 export function buildConnectionProfile(
   settings: AppSettings,
-  profileName = 'CSN Media Bridge Connection Profile',
+  profileName = 'Media Bridge Connection Profile',
 ): BackendConnectionProfile {
   return {
     profileVersion: CONNECTION_PROFILE_VERSION,
@@ -166,6 +166,6 @@ export function buildConnectionProfile(
     },
     exportedAt: new Date().toISOString(),
     notes:
-      'This profile intentionally excludes B2/R2 access keys and the Convex node token.',
+      'This profile intentionally excludes storage access keys and the media library node token.',
   };
 }

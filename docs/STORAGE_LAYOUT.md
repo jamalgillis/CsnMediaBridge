@@ -97,17 +97,22 @@ Split by lifecycle so that expiry rules can be applied by prefix.
 ```text
 r2://{bucket}/
 │
-├── streaming/                                 PERSISTENT — VOD web playback
-│   └── vod/
-│       └── {assetKey}/
-│           ├── master.m3u8                    HLS master playlist
-│           ├── manifest.mpd                   DASH manifest for same chunks
-│           ├── 0/ 1/ 2/ 3/                    CMAF fMP4 renditions
-│           │   ├── index.m3u8                 HLS variant playlist
-│           │   ├── init_0.mp4                 fMP4 init segment
-│           │   └── segment_000.m4s …          Shared fMP4 media segments
-│           ├── playback_h264.mp4              Progressive delivery variant
-│           └── social-{renderJobId}.mp4       Persistent social cut of this asset
+├── videos/                                    PERSISTENT — VOD web playback
+│   └── {assetKey}/
+│       ├── master.m3u8                        HLS master playlist
+│       ├── manifest.mpd                       DASH manifest for same chunks
+│       ├── video/                             CMAF fMP4 video renditions
+│       │   ├── 1080p_6000k/
+│       │   │   ├── stream.m3u8                HLS variant playlist
+│       │   │   ├── init.mp4                   fMP4 init segment
+│       │   │   └── chunk_00001.m4s …          fMP4 media segments
+│       │   ├── 720p_3200k/
+│       │   ├── 480p_1600k/
+│       │   └── 360p_850k/
+│       ├── audio/                             Reserved for demuxed audio tracks
+│       ├── text/                              Reserved for captions/subtitles
+│       ├── playback-h264.mp4                  Progressive delivery variant
+│       └── social-{renderJobId}.mp4           Persistent social cut of this asset
 │
 ├── posters/                                   PERSISTENT — thumbnails
 │   └── {assetKey}/
@@ -127,12 +132,20 @@ r2://{bucket}/
 
 Rules:
 
-- `streaming/` and `posters/` are persistent. They back the live player and
+- `videos/` and `posters/` are persistent. They back the live player and
   article cards; expiring them breaks published pages.
 - VOD streaming packages use one set of CMAF-style fragmented MP4 chunks. The
   HLS `master.m3u8` and DASH `manifest.mpd` files are tiny protocol manifests
   that point at the same media segments, so adding DASH does not change lifecycle
   policy or meaningfully change storage cost.
+- Video rendition folders are named by height and target bitrate, such as
+  `video/720p_3200k/`, so logs, manifests, and bucket listings identify the
+  broken track without looking up FFmpeg's variant index.
+- Segment filenames use five-digit, one-based numbering (`chunk_00001.m4s`) so
+  bucket listings and local scripts sort chunks chronologically.
+- `audio/` and `text/` are reserved top-level namespaces. The initial
+  implementation keeps audio muxed into each video rendition; demuxed audio
+  tracks and captions can be added without renaming existing video paths.
 - `staging/social/` is keyed by **render job** because a staged render exists
   before anyone has decided where it will be posted.
 - `scheduled/social/` is keyed by **social post** because that is the unit the
@@ -141,10 +154,10 @@ Rules:
   collide with itself.
 - A render job with `storageClass: "streaming"` is a *persistent* social cut —
   one meant to stay available rather than expire after posting. It is filed with
-  the asset it was cut from, under the never-expiring streaming prefix, rather
+  the asset it was cut from, under the never-expiring `videos/` prefix, rather
   than in either social launchpad.
 - The poster also ships inside the playback package upload, so
-  `streaming/vod/{assetKey}/poster.jpg` exists alongside the canonical
+  `videos/{assetKey}/poster.jpg` exists alongside the canonical
   `posters/{assetKey}/default.jpg`. That duplicate is a few kilobytes and keeps
   the playback package self-contained for anyone reading the bucket directly;
   `posterUrl` in Convex always points at the `posters/` copy.
@@ -162,7 +175,7 @@ process crashed or a job was abandoned.
 | - | ------------------ | ------------------------- | ----------------------------------------------------------------------- |
 | 1 | `staging/social/`  | Delete after **3 days**   | Scrubs abandoned or crashed browser/desktop renders.                    |
 | 2 | `scheduled/social/`| Delete after **7 days**   | Safety net behind app cleanup; covers a post that never fired.          |
-| 3 | `streaming/`       | *No expiry*               | Powers the VOD player.                                                  |
+| 3 | `videos/`          | *No expiry*               | Powers the VOD player.                                                  |
 | 4 | `posters/`         | *No expiry*               | Powers article cards and thumbnails.                                    |
 
 Rule 2 is a backstop with a deliberate consequence: a post scheduled **more than
@@ -237,9 +250,9 @@ consume the same `storage_tasks` queue, so adding it later is additive.
   archiveObjectKey:      "masters/centex-sports/2026-09-07/a1b2c3d4e5f60718/A001_C012.mov",
 
   // Cloudflare R2 — hot
-  distributionObjectKey: "streaming/vod/a1b2c3d4e5f60718",
-  masterPlaylistUrl:     "https://cdn.example.com/streaming/vod/a1b2c3d4e5f60718/master.m3u8",
-  dashManifestUrl:       "https://cdn.example.com/streaming/vod/a1b2c3d4e5f60718/manifest.mpd",
+  distributionObjectKey: "videos/a1b2c3d4e5f60718",
+  masterPlaylistUrl:     "https://cdn.example.com/videos/a1b2c3d4e5f60718/master.m3u8",
+  dashManifestUrl:       "https://cdn.example.com/videos/a1b2c3d4e5f60718/manifest.mpd",
   posterUrl:             "https://cdn.example.com/posters/a1b2c3d4e5f60718/default.jpg",
 
   // The editorial record a viewer actually sees, once an operator attaches it.
@@ -266,7 +279,7 @@ with the `objectKey` prefix:
 
 | `storageClass`     | Required key prefix   |
 | ------------------ | --------------------- |
-| `streaming`        | `streaming/`          |
+| `streaming`        | `videos/`             |
 | `staging_social`   | `staging/social/`     |
 | `scheduled_social` | `scheduled/social/`   |
 

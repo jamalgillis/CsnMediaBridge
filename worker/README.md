@@ -1,6 +1,6 @@
-# CSN Credential Broker
+# Media Bridge Credential Broker
 
-Mints short-lived, scoped storage credentials for CSN Media Bridge stations.
+Mints short-lived, scoped storage credentials for Media Bridge stations.
 
 ## Why
 
@@ -56,10 +56,10 @@ its configured library credential.
 
 ## What it does not do
 
-- **Deletion is behind its own purpose.** `ingest` and `offload` never receive
-  delete capability, so a compromised station token cannot wipe the archive.
-  `delete` does — and should be changed to require an operator's identity rather
-  than a station's once machine identity moves to Clerk.
+- **Deletion is not minted here.** `ingest` and `offload` never receive delete
+  capability, so a compromised station token cannot wipe the archive. Remote
+  deletion should be handled by a trusted backend path that can verify an
+  operator's identity.
 - **It authenticates stations, not people.** Media requests come from the app's
   host process, not the browser, so they carry the station token. Whoever is
   signed in is gated at the app's own sign-in screen, not here.
@@ -95,13 +95,12 @@ pnpm run deploy
 
 ## Pointing a station at it
 
-**Settings → Show advanced settings → Storage credentials**: the broker address
+**Settings → Show support settings → Storage credentials**: the broker address
 and that station's token.
 
 Leave it empty and nothing changes — the station keeps using the keys in
-Settings. A station refreshes credentials in the background every two hours and
-**falls back to its local keys if the broker is unreachable**, so this service
-being down slows nothing and stops nothing.
+Settings. Those keys are stored in the OS keychain/Credential Manager, not in
+`settings.json`.
 
 ## API
 
@@ -109,8 +108,8 @@ being down slows nothing and stops nothing.
 POST /credentials
 Authorization: Bearer <station token>
 
-{ "purpose": "ingest" | "offload" | "delete",
-  "r2Prefixes": ["streaming/vod/"],
+{ "purpose": "ingest" | "offload",
+  "r2Prefixes": ["videos/"],
   "b2NamePrefix": "masters/" }
 ```
 
@@ -130,7 +129,7 @@ cannot ask for the whole bucket. `GET /health` returns `{"ok":true}`.
 Deploying this changes nothing on its own. To actually close the hole:
 
 1. Deploy the Worker and point stations at it.
-2. Turn on **Settings → advanced → Storage credentials → Stream playback through
+2. Turn on **Settings → support settings → Storage credentials → Route playback through
    the broker** and confirm video still plays.
 3. **Move the CSN sports web app first.** It reads the same R2 objects over the
    same public base URL, and will break the moment the bucket goes private.

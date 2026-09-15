@@ -1,11 +1,11 @@
-# Releasing CSN Media Bridge
+# Releasing Media Bridge
 
 This app now supports hosted desktop updates for packaged builds.
 
 Current release policy:
 
 - Windows: production updater path
-- macOS: update-visible manual download path
+- macOS: signed updater artifact; notarization is still recommended before broad external distribution
 
 ## 1. Create the dedicated GitHub repo
 
@@ -34,7 +34,7 @@ After the repo exists:
 
 The updater feed URL will become:
 
-- `https://jamalgillis.github.io/CsnMediaBridge/downloads`
+- `https://jamalgillis.github.io/CsnMediaBridge`
 
 The app expects platform-specific folders below that base URL:
 
@@ -43,11 +43,14 @@ The app expects platform-specific folders below that base URL:
 
 ## 3. Enable GitHub Actions releases
 
-No additional GitHub secrets are required for the current workflow.
+The workflow needs the Tauri updater signing key in GitHub Actions secrets:
+
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, if the key has a password
 
 The checked-in workflow will:
 
-- build an unsigned macOS release
+- build a signed macOS updater artifact
 - build a Windows Squirrel release
 - upload both sets of artifacts to GitHub Releases
 - deploy the updater feed to GitHub Pages
@@ -83,8 +86,8 @@ Users need one manual upgrade to a build that includes the updater. After that, 
   - prompt the user to install the update in-app
 - on macOS:
   - check for new builds on launch and on a timer
-  - show that a newer build exists
-  - open the hosted download when the user chooses to update
+  - install signed updater artifacts
+  - still benefit from Apple notarization before being handed to non-technical operators
 
 ## Notes
 
@@ -125,5 +128,6 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`, which:
 Point Settings → **Feed base URL** at the directory holding `latest.json`, e.g.
 `https://<owner>.github.io/<repo>`.
 
-- If you later add a paid Apple Developer account, signing and notarization can
-  be added to the `tauri build` step in the release workflow.
+- Add Apple Developer ID signing and notarization to the `tauri build` step
+  before sending macOS installers to non-technical operators outside your own
+  controlled machines.

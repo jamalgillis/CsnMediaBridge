@@ -61,7 +61,7 @@ differ, the storage layout document wins.
 
 | Path | Owner | Purpose | Lifecycle |
 | --- | --- | --- | --- |
-| `streaming/` | `desktop` | Production CMAF HLS/DASH playback packages for web review and VOD playback. | Persistent; never automatically deleted. |
+| `videos/` | `desktop` | Production CMAF HLS/DASH playback packages for web review and VOD playback. | Persistent; never automatically deleted. |
 | `posters/` | `desktop` | Thumbnails and article cards. | Persistent; never automatically deleted. |
 | `staging/social/` | `desktop` | Preemptively rendered social MP4 variants ready for quick handoff. | Provider lifecycle rule deletes after 3 days. |
 | `scheduled/social/` | `shared` | Social MP4 variants protected for future scheduled publishing. | Deleted by trusted cleanup after a verified publish; 7-day provider rule as a backstop. |
@@ -188,7 +188,7 @@ The main product gap is not the ingest pipe itself. The main gap is the shared C
   - Register each rendered social asset in Convex with its R2 object key, public or signed fetch URL policy, target platform, aspect profile, source asset, and lifecycle status.
 
 - `planned` `P1` `desktop` Lifecycle-aware R2 upload routing
-  - Upload production review/playback packages under `/streaming/`.
+  - Upload production review/playback packages under `/videos/`.
   - Upload preemptive social renders under `/staging/social/` so the 24-hour lifecycle rule can clean unused assets.
   - Upload or move scheduled social renders under `/scheduled/social/` before the staging lifecycle can expire them.
   - Prefer a native S3-compatible client for high-throughput direct upload where it improves reliability over rclone for this workflow.

@@ -58,7 +58,7 @@ disturbing objects that already exist.
 **Delivered**
 
 - `src/shared/storageLayout.ts` — the single implementation of the key contract:
-  asset-key derivation, master/streaming/poster/staging/scheduled key builders,
+  asset-key derivation, master/video/poster/staging/scheduled key builders,
   a prefix-to-storage-class validator, and legacy-key detection.
 - `SyncService.buildSyncTargets` takes a layout plan instead of hardcoding
   `{pathPrefix}/{jobFolderName}`.
@@ -70,7 +70,7 @@ disturbing objects that already exist.
 
 **Verification**: a new ingest with a project name writes
 `masters/{project}/{date}/{assetKey}/{file}` in B2 and
-`streaming/vod/{assetKey}/…` plus `posters/{assetKey}/…` in R2; an install
+`videos/{assetKey}/…` plus `posters/{assetKey}/…` in R2; an install
 carrying pre-existing settings keeps writing legacy keys until an operator opts
 in.
 

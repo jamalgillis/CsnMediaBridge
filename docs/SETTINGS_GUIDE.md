@@ -205,7 +205,7 @@ This is the recommended choice, and the default for a fresh install.
 New ingests are filed like this:
 
 - Backblaze B2: `masters/{project}/{date}/{asset key}/{original file name}`
-- Cloudflare R2: `streaming/vod/{asset key}/` for playback, `posters/{asset key}/` for thumbnails
+- Cloudflare R2: `videos/{asset key}/` for playback, `posters/{asset key}/` for thumbnails
 - Social renders: `staging/social/` while they wait, `scheduled/social/` once attached to a scheduled post
 
 The asset key is a short fingerprint of the source file's contents, so the same file always lands in the same folder no matter how many times it is retried or re-ingested.

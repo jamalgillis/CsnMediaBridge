@@ -24,3 +24,5 @@ declare const __CSN_R2_PUBLIC_BASE_URL__: string;
 declare const __CSN_CONVEX_DEPLOYMENT_URL__: string;
 declare const __CSN_CONVEX_MUTATION_PATH__: string;
 declare const __CSN_OFFLOAD_B2_PATH_PREFIX__: string;
+/** Enables raw infrastructure fields for support/internal builds. */
+declare const __SUPPORT_SETTINGS_ENABLED__: boolean;

@@ -190,7 +190,7 @@ Both manifests point at the same per-variant init files and `.m4s` files, so sup
 clients does not double playback storage.
 
 The desktop node generates the full ladder with native FFmpeg and uploads the
-package directory to R2 under `streaming/`. Mux remains a viable alternative
+package directory to R2 under `videos/`. Mux remains a viable alternative
 ingest path if a stream needs to exist without a desktop node available.
 
 The `requestedDelivery` field decides which of these a given ingest produces;
@@ -209,7 +209,7 @@ delivery render.
 | Output          | Format                          | Storage                      | Destination                                   |
 | --------------- | ------------------------------- | ---------------------------- | --------------------------------------------- |
 | Social clip     | Flat `.mp4` (H.264 / AAC)       | R2 `staging/` → `scheduled/` | TikTok, Reels, Shorts, Facebook, X, YouTube    |
-| VOD stream      | `.m3u8` + `.mpd` + `.m4s` segments | R2 `streaming/`            | Web portal, newsroom CMS articles, app player  |
+| VOD stream      | `.m3u8` + `.mpd` + `.m4s` segments | R2 `videos/`               | Web portal, newsroom CMS articles, app player  |
 | Poster / still  | `.jpg` / `.webp`                | R2 `posters/`, B2 `stills/`  | Thumbnails, article cards, social preview      |
 | Master archive  | Original `.mov` / `.mp4`        | B2 `masters/`                | Cold vault for re-editing and re-clipping      |
 
@@ -233,7 +233,7 @@ simply *keep the resident footprint small*.
 
 R2 holds two categories:
 
-- **Persistent:** `streaming/` and `posters/`. These power the VOD player and
+- **Persistent:** `videos/` and `posters/`. These power the VOD player and
   article cards continuously and are never auto-expired.
 - **Ephemeral:** `staging/social/` and `scheduled/social/`. These are launchpads,
   not storage.
@@ -310,7 +310,7 @@ proxies large media.
 | Action                 | In the app                                        | In the stack                                                     |
 | ---------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
 | Browsing archives      | Visual library grid with search and filters       | Convex `videos` query; thumbnails via `posters/` or presigned URL |
-| Viewing media          | Click an asset, playback in the preview player    | HLS from R2 `streaming/`, or presigned B2 URL for a raw master    |
+| Viewing media          | Click an asset, playback in the preview player    | HLS from R2 `videos/`, or presigned B2 URL for a raw master       |
 | Retrieving/processing  | *Trim Clip* / *Re-process Asset*                  | Worker streams the B2 master into FFmpeg, uploads new renders     |
 
 ## 6. Boundary Rules

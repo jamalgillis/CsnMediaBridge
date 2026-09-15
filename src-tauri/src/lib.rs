@@ -55,6 +55,17 @@ struct AppState {
 const APP_CONFIG_DIR_NAME: &str = "CSN Media Bridge";
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const NODE_KEY_FILE_NAME: &str = "node-key.txt";
+#[cfg(not(test))]
+const KEYCHAIN_SERVICE: &str = "com.gfamagency.mediabridge";
+const AUTH_SESSION_KEYCHAIN_ACCOUNT: &str = "auth.session";
+const SECRET_SETTING_PATHS: &[(&[&str], &str)] = &[
+    (&["b2", "keyId"], "settings.b2.keyId"),
+    (&["b2", "applicationKey"], "settings.b2.applicationKey"),
+    (&["r2", "accessKeyId"], "settings.r2.accessKeyId"),
+    (&["r2", "secretAccessKey"], "settings.r2.secretAccessKey"),
+    (&["convex", "nodeToken"], "settings.convex.nodeToken"),
+    (&["broker", "token"], "settings.broker.token"),
+];
 const MAX_JOB_HISTORY: usize = 50;
 const MAX_LOG_ENTRIES: usize = 200;
 const STATE_UPDATED_EVENT: &str = "media-bridge:state-updated";
@@ -63,7 +74,8 @@ const HLS_SEGMENT_DURATION_SECONDS: u64 = 2;
 const DASH_MANIFEST_FILENAME: &str = "manifest.mpd";
 const PROGRESSIVE_H264_FILENAME: &str = "playback-h264.mp4";
 const MASTERS_PREFIX: &str = "masters";
-const STREAMING_PREFIX: &str = "streaming/vod";
+const STREAMING_PREFIX: &str = "videos";
+const LEGACY_STREAMING_PREFIX: &str = "streaming/vod";
 const POSTERS_PREFIX: &str = "posters";
 const UNASSIGNED_PROJECT_SEGMENT: &str = "unassigned";
 const SUPPORTED_INGEST_EXTENSIONS: &[&str] = &["mp4", "m4v", "mov", "webm", "mkv"];
@@ -87,6 +99,12 @@ struct HlsVariant {
     bitrate: &'static str,
     maxrate: &'static str,
     bufsize: &'static str,
+}
+
+impl HlsVariant {
+    fn rendition_name(&self) -> String {
+        format!("{}p_{}", self.label, self.bitrate)
+    }
 }
 
 const HLS_VARIANTS: &[HlsVariant] = &[
@@ -180,8 +198,8 @@ fn default_settings() -> Value {
             "uploadImagesToCloud": false
         },
         "appUpdates": {
-            "enabled": false,
-            "baseUrl": "",
+            "enabled": !option_env!("APP_UPDATE_BASE_URL").unwrap_or("").is_empty(),
+            "baseUrl": option_env!("APP_UPDATE_BASE_URL").unwrap_or(""),
             "checkIntervalMinutes": 60
         },
         "liveRecordings": {
@@ -304,11 +322,112 @@ fn desktop_node_key() -> Result<String, String> {
     Ok(node_key)
 }
 
+#[cfg(test)]
+fn test_keychain() -> &'static Mutex<HashMap<String, String>> {
+    static TEST_KEYCHAIN: std::sync::OnceLock<Mutex<HashMap<String, String>>> =
+        std::sync::OnceLock::new();
+    TEST_KEYCHAIN.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(test)]
+fn secure_read_secret(account: &str) -> Result<Option<String>, String> {
+    Ok(test_keychain()
+        .lock()
+        .map_err(|_| "Test keychain lock is unavailable.".to_string())?
+        .get(account)
+        .cloned())
+}
+
+#[cfg(not(test))]
+fn secure_read_secret(account: &str) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, account)
+        .map_err(|error| format!("Could not open secure storage for {account}: {error}"))?;
+    match entry.get_password() {
+        Ok(secret) => Ok(Some(secret)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(format!(
+            "Could not read secure storage for {account}: {error}"
+        )),
+    }
+}
+
+#[cfg(test)]
+fn secure_write_secret(account: &str, secret: &str) -> Result<(), String> {
+    let mut keychain = test_keychain()
+        .lock()
+        .map_err(|_| "Test keychain lock is unavailable.".to_string())?;
+    if secret.is_empty() {
+        keychain.remove(account);
+    } else {
+        keychain.insert(account.to_string(), secret.to_string());
+    }
+    Ok(())
+}
+
+#[cfg(not(test))]
+fn secure_write_secret(account: &str, secret: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, account)
+        .map_err(|error| format!("Could not open secure storage for {account}: {error}"))?;
+    if secret.is_empty() {
+        return match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(format!(
+                "Could not clear secure storage for {account}: {error}"
+            )),
+        };
+    }
+    entry
+        .set_password(secret)
+        .map_err(|error| format!("Could not write secure storage for {account}: {error}"))
+}
+
+fn redact_secret_settings(mut settings: Value) -> Value {
+    for (path, _) in SECRET_SETTING_PATHS {
+        set_string_at_path(&mut settings, path, String::new());
+    }
+    settings
+}
+
+fn has_inline_settings_secrets(settings: &Value) -> bool {
+    SECRET_SETTING_PATHS
+        .iter()
+        .any(|(path, _)| !string_setting(settings, path).trim().is_empty())
+}
+
+fn store_settings_secrets(settings: &Value) -> Result<(), String> {
+    for (path, account) in SECRET_SETTING_PATHS {
+        secure_write_secret(account, string_setting(settings, path).trim())?;
+    }
+    Ok(())
+}
+
+fn hydrate_settings_secrets(mut settings: Value) -> Result<Value, String> {
+    for (path, account) in SECRET_SETTING_PATHS {
+        if let Some(secret) = secure_read_secret(account)? {
+            set_string_at_path(&mut settings, path, secret);
+        }
+    }
+    Ok(settings)
+}
+
+fn write_settings_json(path: &Path, settings: &Value) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Could not resolve the settings parent directory.".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
+
+    let serialized = serde_json::to_string_pretty(settings)
+        .map_err(|error| format!("Could not serialize settings: {error}"))?;
+    fs::write(&path, serialized)
+        .map_err(|error| format!("Could not write {}: {error}", path.display()))
+}
+
 fn read_settings_file() -> Result<Value, String> {
     let path = settings_path()?;
 
     if !path.exists() {
-        return Ok(default_settings());
+        return hydrate_settings_secrets(default_settings());
     }
 
     let raw_settings = fs::read_to_string(&path)
@@ -316,25 +435,21 @@ fn read_settings_file() -> Result<Value, String> {
     let saved_settings = serde_json::from_str::<Value>(&raw_settings)
         .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
 
-    Ok(normalize_settings_value(merge_defaults(
-        default_settings(),
-        saved_settings,
-    )))
+    let normalized_settings =
+        normalize_settings_value(merge_defaults(default_settings(), saved_settings));
+    if has_inline_settings_secrets(&normalized_settings) {
+        store_settings_secrets(&normalized_settings)?;
+        write_settings_json(&path, &redact_secret_settings(normalized_settings.clone()))?;
+    }
+
+    hydrate_settings_secrets(normalized_settings)
 }
 
 fn write_settings_file(settings: &Value) -> Result<(), String> {
     let path = settings_path()?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| "Could not resolve the settings parent directory.".to_string())?;
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
-
     let normalized_settings = normalize_settings_value(settings.clone());
-    let serialized = serde_json::to_string_pretty(&normalized_settings)
-        .map_err(|error| format!("Could not serialize settings: {error}"))?;
-    fs::write(&path, serialized)
-        .map_err(|error| format!("Could not write {}: {error}", path.display()))
+    store_settings_secrets(&normalized_settings)?;
+    write_settings_json(&path, &redact_secret_settings(normalized_settings))
 }
 
 fn connection_profile_name(profile: &Value) -> String {
@@ -530,7 +645,7 @@ fn build_connection_profile(settings: &Value, profile_name: &str) -> Value {
             "checkIntervalMinutes": number_setting(settings, &["appUpdates", "checkIntervalMinutes"], 60.0),
         },
         "exportedAt": now_iso(),
-        "notes": "This profile intentionally excludes B2/R2 access keys and the Convex node token.",
+        "notes": "This profile intentionally excludes storage access keys and the media library node token.",
     })
 }
 
@@ -971,7 +1086,8 @@ fn proxy_url_value(settings: &Value, origin: &str, value: Option<&Value>) -> Opt
     let remote_url = value?.as_str()?;
     // Through the broker first when it is serving media, then through the local
     // proxy so the webview plays from loopback either way.
-    let remote_url = broker_media_url(settings, remote_url).unwrap_or_else(|| remote_url.to_string());
+    let remote_url =
+        broker_media_url(settings, remote_url).unwrap_or_else(|| remote_url.to_string());
 
     media_proxy_url(origin, &remote_url)
         .or(Some(remote_url))
@@ -1594,7 +1710,13 @@ fn write_dash_manifest(
     duration_seconds: f64,
     has_audio: bool,
 ) -> Result<PathBuf, String> {
-    let reference_playlist_path = output_directory.join("0").join("index.m3u8");
+    let reference_variant = HLS_VARIANTS
+        .first()
+        .ok_or_else(|| "No HLS variants are configured.".to_string())?;
+    let reference_playlist_path = output_directory
+        .join("video")
+        .join(reference_variant.rendition_name())
+        .join("stream.m3u8");
     let reference_playlist = fs::read_to_string(&reference_playlist_path).unwrap_or_default();
     let parsed_durations = parse_hls_segment_durations(&reference_playlist);
     let segment_durations = if parsed_durations.is_empty() {
@@ -1616,10 +1738,10 @@ fn write_dash_manifest(
     let representations = HLS_VARIANTS
         .iter()
         .enumerate()
-        .map(|(index, variant)| {
+        .map(|(_, variant)| {
             format!(
                 "      <Representation id=\"{}\" bandwidth=\"{}\" width=\"{}\" height=\"{}\" codecs=\"{}\"/>",
-                escape_xml_attribute(index),
+                escape_xml_attribute(variant.rendition_name()),
                 escape_xml_attribute(parse_bitrate(variant.bitrate)),
                 escape_xml_attribute(variant.width),
                 escape_xml_attribute(variant.height),
@@ -1643,9 +1765,9 @@ fn write_dash_manifest(
                    subsegmentAlignment="true"
                    startWithSAP="1">
       <SegmentTemplate timescale="1000"
-                       startNumber="0"
-                       initialization="$RepresentationID$/init_$RepresentationID$.mp4"
-                       media="$RepresentationID$/segment_$Number%03d$.m4s">
+                       startNumber="1"
+                       initialization="video/$RepresentationID$/init.mp4"
+                       media="video/$RepresentationID$/chunk_$Number%05d$.m4s">
         <SegmentTimeline>
 {}
         </SegmentTimeline>
@@ -1745,8 +1867,7 @@ fn storage_is_configured(settings: &Value) -> bool {
 /// synchronous transfer code, and threading a parameter through all of them to
 /// carry derived data would obscure more than it explains. There is exactly one
 /// writer — the refresh loop below.
-static BROKERED_CREDENTIALS: std::sync::OnceLock<Mutex<Option<Value>>> =
-    std::sync::OnceLock::new();
+static BROKERED_CREDENTIALS: std::sync::OnceLock<Mutex<Option<Value>>> = std::sync::OnceLock::new();
 
 fn brokered_credentials_cell() -> &'static Mutex<Option<Value>> {
     BROKERED_CREDENTIALS.get_or_init(|| Mutex::new(None))
@@ -1812,14 +1933,21 @@ fn broker_media_credentials(target_url: &str) -> Option<(String, Option<String>)
         return None;
     }
 
-    let station_token = string_setting(&settings, &["broker", "token"]).trim().to_string();
+    let station_token = string_setting(&settings, &["broker", "token"])
+        .trim()
+        .to_string();
     if station_token.is_empty() {
         return None;
     }
 
-    let node_token = string_setting(&settings, &["convex", "nodeToken"]).trim().to_string();
+    let node_token = string_setting(&settings, &["convex", "nodeToken"])
+        .trim()
+        .to_string();
 
-    Some((station_token, (!node_token.is_empty()).then_some(node_token)))
+    Some((
+        station_token,
+        (!node_token.is_empty()).then_some(node_token),
+    ))
 }
 
 fn broker_url(settings: &Value) -> String {
@@ -1831,7 +1959,9 @@ fn broker_url(settings: &Value) -> String {
 
 fn broker_is_configured(settings: &Value) -> bool {
     !broker_url(settings).is_empty()
-        && !string_setting(settings, &["broker", "token"]).trim().is_empty()
+        && !string_setting(settings, &["broker", "token"])
+            .trim()
+            .is_empty()
 }
 
 /// Asks the broker for a fresh, scoped set.
@@ -3542,16 +3672,24 @@ fn run_hls_transcode(
     duration_seconds: f64,
     encoder: &str,
 ) -> Result<(PathBuf, PathBuf), String> {
-    for (index, _) in HLS_VARIANTS.iter().enumerate() {
-        let variant_directory = output_directory.join(index.to_string());
+    for variant in HLS_VARIANTS {
+        let variant_directory = output_directory
+            .join("video")
+            .join(variant.rendition_name());
         fs::create_dir_all(&variant_directory).map_err(|error| {
             format!("Could not create {}: {error}", variant_directory.display())
         })?;
     }
 
     let master_playlist_path = output_directory.join("master.m3u8");
-    let output_playlist_pattern = output_directory.join("%v").join("index.m3u8");
-    let segment_pattern = output_directory.join("%v").join("segment_%03d.m4s");
+    let output_playlist_pattern = output_directory
+        .join("video")
+        .join("%v")
+        .join("stream.m3u8");
+    let segment_pattern = output_directory
+        .join("video")
+        .join("%v")
+        .join("chunk_%05d.m4s");
     let keyframe_interval = get_hls_keyframe_interval(frame_rate);
     let mut args = vec!["-y".to_string()];
     args.extend(encoder_input_options(encoder));
@@ -3613,14 +3751,16 @@ fn run_hls_transcode(
         HLS_VARIANTS
             .iter()
             .enumerate()
-            .map(|(index, _)| format!("v:{index},a:{index}"))
+            .map(|(index, variant)| {
+                format!("v:{index},a:{index},name:{}", variant.rendition_name())
+            })
             .collect::<Vec<_>>()
             .join(" ")
     } else {
         HLS_VARIANTS
             .iter()
             .enumerate()
-            .map(|(index, _)| format!("v:{index}"))
+            .map(|(index, variant)| format!("v:{index},name:{}", variant.rendition_name()))
             .collect::<Vec<_>>()
             .join(" ")
     };
@@ -3639,6 +3779,8 @@ fn run_hls_transcode(
             "fmp4",
             "-hls_fmp4_init_filename",
             "init.mp4",
+            "-start_number",
+            "1",
             "-master_pl_name",
             "master.m3u8",
             "-var_stream_map",
@@ -3793,7 +3935,10 @@ fn retry_wait_label(seconds: i64) -> String {
         "in under a minute".to_string()
     } else {
         let minutes = (seconds as f64 / 60.0).round() as i64;
-        format!("in about {minutes} minute{}", if minutes == 1 { "" } else { "s" })
+        format!(
+            "in about {minutes} minute{}",
+            if minutes == 1 { "" } else { "s" }
+        )
     }
 }
 
@@ -3832,10 +3977,7 @@ fn schedule_job_retry(state: &tauri::State<'_, AppState>, job_id: &str, error: &
         return;
     }
 
-    let attempt = job
-        .get("retryAttempt")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as usize;
+    let attempt = job.get("retryAttempt").and_then(Value::as_u64).unwrap_or(0) as usize;
     let attempts_left = attempt < JOB_RETRY_BACKOFF_SECONDS.len();
 
     if !is_transient_failure(error) || !attempts_left {
@@ -4103,7 +4245,9 @@ fn process_queued_job(app: tauri::AppHandle, job_id: String) {
                 delivery_type,
                 preferred_encoder,
                 allow_software_fallback,
-                |encoder| run_progressive_transcode(&source_path, &output_directory, has_audio, encoder),
+                |encoder| {
+                    run_progressive_transcode(&source_path, &output_directory, has_audio, encoder)
+                },
             )?;
             let poster_path = if extract_poster_enabled {
                 extract_poster(&playback_path, &output_directory, duration_seconds).ok()
@@ -4731,10 +4875,7 @@ fn stored_manifest_url(video: &Value) -> Option<String> {
 }
 
 fn public_url_for(settings: &Value, object_key: &str, file_name: Option<&str>) -> String {
-    let key = join_object_key(&[
-        Some(object_key.to_string()),
-        file_name.map(str::to_string),
-    ]);
+    let key = join_object_key(&[Some(object_key.to_string()), file_name.map(str::to_string)]);
     join_public_url(string_setting(settings, &["r2", "publicBaseUrl"]), &key)
 }
 
@@ -4803,10 +4944,7 @@ fn stored_video_entry_payload(video: &Value, overrides: Value) -> Value {
         "sourceFileName".to_string(),
         Value::String(source_file_name.to_string()),
     );
-    payload.insert(
-        "createdAt".to_string(),
-        Value::String(now_iso()),
-    );
+    payload.insert("createdAt".to_string(), Value::String(now_iso()));
 
     for key in [
         "sourceFingerprint",
@@ -4923,10 +5061,19 @@ fn encoder_input_options(encoder: &str) -> Vec<String> {
 /// target on the hardware encoders, which have no CRF equivalent.
 fn progressive_video_options(encoder: &str) -> Vec<String> {
     match encoder {
-        "nvenc" => ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "21", "-b:v", "0"]
-            .into_iter()
-            .map(String::from)
-            .collect(),
+        "nvenc" => [
+            "-c:v",
+            "h264_nvenc",
+            "-preset",
+            "p5",
+            "-cq",
+            "21",
+            "-b:v",
+            "0",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect(),
         "videotoolbox" => ["-c:v", "h264_videotoolbox", "-b:v", "8M"]
             .into_iter()
             .map(String::from)
@@ -4968,10 +5115,19 @@ fn encoder_label(encoder: &str) -> &'static str {
 
 fn trim_video_options(encoder: &str) -> Vec<String> {
     match encoder {
-        "nvenc" => ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "21", "-b:v", "0"]
-            .into_iter()
-            .map(String::from)
-            .collect(),
+        "nvenc" => [
+            "-c:v",
+            "h264_nvenc",
+            "-preset",
+            "p5",
+            "-cq",
+            "21",
+            "-b:v",
+            "0",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect(),
         "videotoolbox" => ["-c:v", "h264_videotoolbox", "-b:v", "8M"]
             .into_iter()
             .map(String::from)
@@ -5060,7 +5216,10 @@ fn poster_candidate_times(duration_seconds: f64) -> Vec<f64> {
     for fraction in [0.12_f64, 0.32, 0.56, 0.82] {
         let timestamp = ((safe_duration * fraction).max(0.25) * 100.0).round() / 100.0;
         let clamped = (timestamp.min((ceiling * 100.0).round() / 100.0) * 100.0).round() / 100.0;
-        if !times.iter().any(|existing: &f64| (*existing - clamped).abs() < f64::EPSILON) {
+        if !times
+            .iter()
+            .any(|existing: &f64| (*existing - clamped).abs() < f64::EPSILON)
+        {
             times.push(clamped);
         }
     }
@@ -5088,23 +5247,22 @@ fn format_poster_label(timestamp_seconds: f64) -> String {
 /// keep theirs beside the playback package.
 fn resolve_poster_object_key(distribution_object_key: &str) -> String {
     let normalized = distribution_object_key.trim_matches('/');
-    let streaming_prefix = format!("{STREAMING_PREFIX}/");
 
-    if let Some(remainder) = normalized.strip_prefix(&streaming_prefix) {
-        let asset_key = remainder.split('/').next().unwrap_or_default().trim();
-        if !asset_key.is_empty() {
-            return join_object_key(&[
-                Some(POSTERS_PREFIX.to_string()),
-                Some(asset_key.to_string()),
-                Some("poster.jpg".to_string()),
-            ]);
+    for prefix in [STREAMING_PREFIX, LEGACY_STREAMING_PREFIX] {
+        let streaming_prefix = format!("{prefix}/");
+        if let Some(remainder) = normalized.strip_prefix(&streaming_prefix) {
+            let asset_key = remainder.split('/').next().unwrap_or_default().trim();
+            if !asset_key.is_empty() {
+                return join_object_key(&[
+                    Some(POSTERS_PREFIX.to_string()),
+                    Some(asset_key.to_string()),
+                    Some("default.jpg".to_string()),
+                ]);
+            }
         }
     }
 
-    join_object_key(&[
-        Some(normalized.to_string()),
-        Some("poster.jpg".to_string()),
-    ])
+    join_object_key(&[Some(normalized.to_string()), Some("poster.jpg".to_string())])
 }
 
 /* -------------------------------------------------------- archive presigning */
@@ -5119,9 +5277,7 @@ fn parse_b2_endpoint(endpoint: &str) -> Option<(String, String)> {
     }
 
     let host = trimmed.strip_prefix("https://")?;
-    let region = host
-        .strip_prefix("s3.")?
-        .strip_suffix(".backblazeb2.com")?;
+    let region = host.strip_prefix("s3.")?.strip_suffix(".backblazeb2.com")?;
 
     if region.is_empty()
         || !region
@@ -5137,7 +5293,10 @@ fn parse_b2_endpoint(endpoint: &str) -> Option<(String, String)> {
 /// Explains what is missing rather than returning a bare false, so the screen
 /// can name the setting to fill in instead of just disabling a button.
 fn archive_unavailable_reason(settings: &Value) -> Option<String> {
-    if string_setting(settings, &["b2", "bucket"]).trim().is_empty() {
+    if string_setting(settings, &["b2", "bucket"])
+        .trim()
+        .is_empty()
+    {
         return Some(
             "Set the Backblaze B2 bucket in Settings before previewing archived masters."
                 .to_string(),
@@ -5180,8 +5339,8 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 fn hmac_sha256(key: &[u8], message: &str) -> Vec<u8> {
     use hmac::{Hmac, Mac};
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(key)
-        .expect("HMAC accepts a key of any length");
+    let mut mac =
+        <Hmac<Sha256> as Mac>::new_from_slice(key).expect("HMAC accepts a key of any length");
     mac.update(message.as_bytes());
     mac.finalize().into_bytes().to_vec()
 }
@@ -5199,9 +5358,7 @@ fn uri_encode_segment(segment: &str) -> String {
     let mut encoded = String::with_capacity(segment.len());
     for byte in segment.as_bytes() {
         let character = *byte as char;
-        if character.is_ascii_alphanumeric()
-            || matches!(character, '-' | '_' | '.' | '~')
-        {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.' | '~') {
             encoded.push(character);
         } else {
             encoded.push_str(&format!("%{byte:02X}"));
@@ -5234,8 +5391,12 @@ fn presign_b2_object_url(
         .ok_or_else(|| "B2 S3 endpoint must be an https address.".to_string())?
         .to_string();
 
-    let bucket = string_setting(settings, &["b2", "bucket"]).trim().to_string();
-    let access_key_id = string_setting(settings, &["b2", "keyId"]).trim().to_string();
+    let bucket = string_setting(settings, &["b2", "bucket"])
+        .trim()
+        .to_string();
+    let access_key_id = string_setting(settings, &["b2", "keyId"])
+        .trim()
+        .to_string();
     let secret_access_key = string_setting(settings, &["b2", "applicationKey"])
         .trim()
         .to_string();
@@ -5305,7 +5466,9 @@ fn download_from_b2(
             .map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
     }
 
-    let bucket = string_setting(settings, &["b2", "bucket"]).trim().to_string();
+    let bucket = string_setting(settings, &["b2", "bucket"])
+        .trim()
+        .to_string();
     let source_object_key = source_object_key.trim_matches('/').to_string();
 
     with_rclone_config(settings, |config_path| {
@@ -5402,7 +5565,10 @@ fn archived_stream_uids(listing: &Value) -> Vec<String> {
                         return None;
                     }
                     let segments = path.split('/').collect::<Vec<_>>();
-                    let folder = segments.len().checked_sub(2).and_then(|index| segments.get(index))?;
+                    let folder = segments
+                        .len()
+                        .checked_sub(2)
+                        .and_then(|index| segments.get(index))?;
                     is_stream_uid(folder).then(|| folder.to_ascii_lowercase())
                 })
                 .collect::<Vec<_>>()
@@ -5470,7 +5636,8 @@ fn begin_stream_transfer(
         .map_err(|_| "Transfers lock is unavailable.".to_string())?;
 
     if transfers.iter().any(|transfer| {
-        transfer.get("uid").and_then(Value::as_str) == Some(uid) && stream_transfer_is_active(transfer)
+        transfer.get("uid").and_then(Value::as_str) == Some(uid)
+            && stream_transfer_is_active(transfer)
     }) {
         return Err("This recording is already being transferred.".to_string());
     }
@@ -5642,9 +5809,12 @@ fn spawn_rclone_rcat(
     if let Some(size) = size {
         command.args(["--size", &size.to_string()]);
     }
-    command
-        .spawn()
-        .map_err(|error| format!("Could not start rclone at {}: {error}", rclone_path.display()))
+    command.spawn().map_err(|error| {
+        format!(
+            "Could not start rclone at {}: {error}",
+            rclone_path.display()
+        )
+    })
 }
 
 fn finish_rclone_rcat(mut child: std::process::Child) -> Result<(), String> {
@@ -5656,8 +5826,20 @@ fn finish_rclone_rcat(mut child: std::process::Child) -> Result<(), String> {
         return Ok(());
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let tail = stderr.lines().rev().take(8).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
-    Err(if tail.trim().is_empty() { "rclone stopped without saying why.".to_string() } else { tail })
+    let tail = stderr
+        .lines()
+        .rev()
+        .take(8)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+    Err(if tail.trim().is_empty() {
+        "rclone stopped without saying why.".to_string()
+    } else {
+        tail
+    })
 }
 
 fn archive_stream_recording_inner(
@@ -5673,7 +5855,9 @@ fn archive_stream_recording_inner(
         trim_string(recording.get("clientName")).as_deref(),
         trim_string(recording.get("createdAt")).as_deref(),
     );
-    let bucket = string_setting(settings, &["b2", "bucket"]).trim().to_string();
+    let bucket = string_setting(settings, &["b2", "bucket"])
+        .trim()
+        .to_string();
     let url = wait_for_stream_download(app, settings, uid, cancel)?;
 
     with_rclone_config(settings, |config_path| {
@@ -5708,7 +5892,11 @@ fn archive_stream_recording_inner(
         };
         finish_rclone_rcat(child.ok_or_else(|| "Nothing was uploaded.".to_string())?)?;
 
-        patch_stream_transfer(app, uid, json!({ "status": "verifying", "message": "Checking the archive copy." }));
+        patch_stream_transfer(
+            app,
+            uid,
+            json!({ "status": "verifying", "message": "Checking the archive copy." }),
+        );
         let listing = run_rclone_capture(&[
             "lsjson".to_string(),
             video_target.clone(),
@@ -5718,11 +5906,18 @@ fn archive_stream_recording_inner(
         ])?;
         let stored = serde_json::from_str::<Value>(&listing)
             .ok()
-            .and_then(|entries| entries.get(0).and_then(|entry| entry.get("Size")).and_then(Value::as_u64));
+            .and_then(|entries| {
+                entries
+                    .get(0)
+                    .and_then(|entry| entry.get("Size"))
+                    .and_then(Value::as_u64)
+            });
         if stored != Some(bytes) {
             return Err(format!(
                 "The archive holds {} bytes but {bytes} were sent.",
-                stored.map(|size| size.to_string()).unwrap_or_else(|| "no".to_string())
+                stored
+                    .map(|size| size.to_string())
+                    .unwrap_or_else(|| "no".to_string())
             ));
         }
 
@@ -5803,11 +5998,16 @@ fn run_stream_transfer(
     cancel: Arc<AtomicBool>,
 ) {
     let state = app.state::<AppState>();
-    let outcome = load_settings_from_state(&state).and_then(|settings| match (kind, destination.as_ref()) {
-        ("archive", _) => archive_stream_recording_inner(&app, &settings, &uid, &recording, &cancel),
-        (_, Some(destination)) => download_stream_recording_inner(&app, &settings, &uid, destination, &cancel),
-        _ => Err("No destination was chosen.".to_string()),
-    });
+    let outcome =
+        load_settings_from_state(&state).and_then(|settings| match (kind, destination.as_ref()) {
+            ("archive", _) => {
+                archive_stream_recording_inner(&app, &settings, &uid, &recording, &cancel)
+            }
+            (_, Some(destination)) => {
+                download_stream_recording_inner(&app, &settings, &uid, destination, &cancel)
+            }
+            _ => Err("No destination was chosen.".to_string()),
+        });
 
     let title = trim_string(recording.get("name")).unwrap_or_else(|| uid.clone());
     match outcome {
@@ -5830,7 +6030,11 @@ fn run_stream_transfer(
             );
         }
         Err(error) if error == STREAM_TRANSFER_CANCELED => {
-            patch_stream_transfer(&app, &uid, json!({ "status": "canceled", "message": Value::Null, "finishedAt": now_iso() }));
+            patch_stream_transfer(
+                &app,
+                &uid,
+                json!({ "status": "canceled", "message": Value::Null, "finishedAt": now_iso() }),
+            );
         }
         Err(error) => {
             patch_stream_transfer(
@@ -5838,7 +6042,13 @@ fn run_stream_transfer(
                 &uid,
                 json!({ "status": "failed", "errorMessage": error.clone(), "message": Value::Null, "finishedAt": now_iso() }),
             );
-            let _ = append_log(&state, "error", "stream-library", format!("{title}: {error}"), None);
+            let _ = append_log(
+                &state,
+                "error",
+                "stream-library",
+                format!("{title}: {error}"),
+                None,
+            );
         }
     }
 
@@ -5852,7 +6062,12 @@ fn run_rclone_capture(args: &[String]) -> Result<String, String> {
     let output = Command::new(&rclone_path)
         .args(args)
         .output()
-        .map_err(|error| format!("Could not start rclone at {}: {error}", rclone_path.display()))?;
+        .map_err(|error| {
+            format!(
+                "Could not start rclone at {}: {error}",
+                rclone_path.display()
+            )
+        })?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
@@ -5876,11 +6091,24 @@ async fn list_stream_recordings(
     require_stream_library(&settings)?;
 
     let mut args = serde_json::Map::new();
-    insert_if_present(&mut args, "before", trim_string(request.get("before")).map(Value::from));
-    insert_if_present(&mut args, "search", trim_string(request.get("search")).map(Value::from));
+    insert_if_present(
+        &mut args,
+        "before",
+        trim_string(request.get("before")).map(Value::from),
+    );
+    insert_if_present(
+        &mut args,
+        "search",
+        trim_string(request.get("search")).map(Value::from),
+    );
     args.insert(
         "liveOnly".to_string(),
-        Value::Bool(request.get("liveOnly").and_then(Value::as_bool).unwrap_or(true)),
+        Value::Bool(
+            request
+                .get("liveOnly")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        ),
     );
 
     call_convex_action(&settings, STREAM_LIBRARY_LIST_ACTION, Value::Object(args))
@@ -5890,14 +6118,21 @@ async fn list_stream_recordings(
 
 /// Which Stream recordings already have a copy in the Backblaze archive.
 #[tauri::command]
-async fn list_archived_stream_uids(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+async fn list_archived_stream_uids(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
     let settings = load_settings_from_state(&state)?;
-    if string_setting(&settings, &["b2", "bucket"]).trim().is_empty() {
+    if string_setting(&settings, &["b2", "bucket"])
+        .trim()
+        .is_empty()
+    {
         return Ok(Vec::new());
     }
 
     tauri::async_runtime::spawn_blocking(move || {
-        let bucket = string_setting(&settings, &["b2", "bucket"]).trim().to_string();
+        let bucket = string_setting(&settings, &["b2", "bucket"])
+            .trim()
+            .to_string();
         let listing = with_rclone_config(&settings, |config_path| {
             match run_rclone_capture(&[
                 "lsjson".to_string(),
@@ -5928,7 +6163,10 @@ async fn archive_stream_recording(
 ) -> Result<Value, String> {
     let settings = load_settings_from_state(&state)?;
     require_stream_library(&settings)?;
-    if string_setting(&settings, &["b2", "bucket"]).trim().is_empty() {
+    if string_setting(&settings, &["b2", "bucket"])
+        .trim()
+        .is_empty()
+    {
         return Err("Set up Backblaze in Settings before archiving recordings.".to_string());
     }
 
@@ -5939,7 +6177,8 @@ async fn archive_stream_recording(
         trim_string(recording.get("clientName")).as_deref(),
         trim_string(recording.get("createdAt")).as_deref(),
     );
-    let (snapshot, cancel) = begin_stream_transfer(&state, &uid, "archive", &recording, &keys.video)?;
+    let (snapshot, cancel) =
+        begin_stream_transfer(&state, &uid, "archive", &recording, &keys.video)?;
     emit_stream_transfers(&app);
 
     let worker = app.clone();
@@ -5987,7 +6226,16 @@ async fn download_stream_recording(
     emit_stream_transfers(&app);
 
     let worker = app.clone();
-    thread::spawn(move || run_stream_transfer(worker, uid, "download", recording, Some(destination), cancel));
+    thread::spawn(move || {
+        run_stream_transfer(
+            worker,
+            uid,
+            "download",
+            recording,
+            Some(destination),
+            cancel,
+        )
+    });
     Ok(snapshot)
 }
 
@@ -6025,7 +6273,8 @@ fn dismiss_stream_transfer(
         .lock()
         .map_err(|_| "Transfers lock is unavailable.".to_string())?
         .retain(|transfer| {
-            transfer.get("uid").and_then(Value::as_str) != Some(uid.trim()) || stream_transfer_is_active(transfer)
+            transfer.get("uid").and_then(Value::as_str) != Some(uid.trim())
+                || stream_transfer_is_active(transfer)
         });
     emit_stream_transfers(&app);
     Ok(())
@@ -6142,15 +6391,18 @@ fn to_webp_relative_path(relative_path: &str) -> String {
     for extension in OFFLOAD_IMAGE_EXTENSIONS {
         let suffix = format!(".{extension}");
         if lowered.ends_with(&suffix) {
-            return format!("{}.webp", &relative_path[..relative_path.len() - suffix.len()]);
+            return format!(
+                "{}.webp",
+                &relative_path[..relative_path.len() - suffix.len()]
+            );
         }
     }
     format!("{relative_path}.webp")
 }
 
 fn file_sha256(path: &Path) -> Result<String, String> {
-    let file =
-        fs::File::open(path).map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    let file = fs::File::open(path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 1024 * 1024];
@@ -6218,7 +6470,9 @@ fn file_matches_checksum(path: &Path, checksum: &str, size: Option<u64>) -> bool
         }
     }
 
-    file_sha256(path).map(|actual| actual == checksum).unwrap_or(false)
+    file_sha256(path)
+        .map(|actual| actual == checksum)
+        .unwrap_or(false)
 }
 
 fn convert_image_to_webp(source: &Path, destination: &Path) -> Result<(), String> {
@@ -6321,7 +6575,8 @@ impl OffloadRun {
         }
 
         let copy_progress = value_to_f64(self.snapshot.get("copyProgress")).unwrap_or(0.0);
-        let conversion_progress = value_to_f64(self.snapshot.get("conversionProgress")).unwrap_or(0.0);
+        let conversion_progress =
+            value_to_f64(self.snapshot.get("conversionProgress")).unwrap_or(0.0);
         let upload_progress = value_to_f64(self.snapshot.get("uploadProgress")).unwrap_or(0.0);
         let overall = if self.snapshot.get("status").and_then(Value::as_str) == Some("complete") {
             100.0
@@ -6401,7 +6656,6 @@ fn offload_interruption(state: &tauri::State<'_, AppState>) -> Option<&'static s
     }
 }
 
-
 /// The offload itself, on a worker thread: copy, convert, upload.
 ///
 /// Every phase is skippable and every phase is resumable. Nothing here deletes
@@ -6434,9 +6688,8 @@ fn run_offload(app: tauri::AppHandle, request: Value, settings: Value) {
         if destination_root.as_os_str().is_empty() {
             return Err("Set an offload drive in Settings before copying a card.".to_string());
         }
-        fs::create_dir_all(&destination_root).map_err(|error| {
-            format!("Could not create {}: {error}", destination_root.display())
-        })?;
+        fs::create_dir_all(&destination_root)
+            .map_err(|error| format!("Could not create {}: {error}", destination_root.display()))?;
 
         let existing_manifest =
             find_existing_offload_manifest(&destination_root, &source_path, &job_name);
@@ -6507,7 +6760,8 @@ fn run_offload(app: tauri::AppHandle, request: Value, settings: Value) {
                 .or_insert_with(|| json!({}));
         }
 
-        let task_id = trim_string(manifest.get("taskId")).unwrap_or_else(|| create_id("offload", 1));
+        let task_id =
+            trim_string(manifest.get("taskId")).unwrap_or_else(|| create_id("offload", 1));
 
         let snapshot = json!({
             "id": task_id,
@@ -6548,7 +6802,10 @@ fn run_offload(app: tauri::AppHandle, request: Value, settings: Value) {
         };
 
         run.log(&if is_resume {
-            format!("Resuming the copy of {source_name} into {}.", package_path.display())
+            format!(
+                "Resuming the copy of {source_name} into {}.",
+                package_path.display()
+            )
         } else {
             format!("Copying {source_name} into {}.", package_path.display())
         });
@@ -6585,7 +6842,9 @@ fn run_offload(app: tauri::AppHandle, request: Value, settings: Value) {
 
             let already_there = if safe_mode {
                 match entry_checksum.as_deref() {
-                    Some(checksum) => file_matches_checksum(&destination, checksum, Some(file.size)),
+                    Some(checksum) => {
+                        file_matches_checksum(&destination, checksum, Some(file.size))
+                    }
                     None => false,
                 }
             } else {
@@ -6697,7 +6956,9 @@ fn run_offload(app: tauri::AppHandle, request: Value, settings: Value) {
                 } else {
                     convert_image_to_webp(&file.absolute_path, &output_path)?;
                     let checksum = file_sha256(&output_path)?;
-                    let size = fs::metadata(&output_path).map(|meta| meta.len()).unwrap_or(0);
+                    let size = fs::metadata(&output_path)
+                        .map(|meta| meta.len())
+                        .unwrap_or(0);
 
                     if let Some(entry) = run
                         .manifest
@@ -6863,7 +7124,13 @@ fn run_offload(app: tauri::AppHandle, request: Value, settings: Value) {
             snapshot
         };
 
-        let _ = append_log(&state, if status == "error" { "error" } else { "info" }, "offload", message, None);
+        let _ = append_log(
+            &state,
+            if status == "error" { "error" } else { "info" },
+            "offload",
+            message,
+            None,
+        );
         let _ = app.emit(OFFLOAD_UPDATED_EVENT, snapshot);
     }
 
@@ -6905,12 +7172,15 @@ fn rclone_list_remote_objects(
         }
 
         let rclone_path = resolve_tool("rclone", &["version"]);
-        let output = Command::new(&rclone_path).args(&args).output().map_err(|error| {
-            format!(
-                "Could not start rclone at {}: {error}",
-                rclone_path.display()
-            )
-        })?;
+        let output = Command::new(&rclone_path)
+            .args(&args)
+            .output()
+            .map_err(|error| {
+                format!(
+                    "Could not start rclone at {}: {error}",
+                    rclone_path.display()
+                )
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -7294,7 +7564,8 @@ fn scan_watch_folder(folder: &Path) -> Vec<PathBuf> {
 
 /// True once the file has stopped changing and can be opened for reading.
 fn wait_for_file_ready(path: &Path, settings: &Value, watching: &Arc<AtomicBool>) -> bool {
-    let stable_passes_needed = number_setting(settings, &["readyCheckStablePasses"], 3.0).max(1.0) as u32;
+    let stable_passes_needed =
+        number_setting(settings, &["readyCheckStablePasses"], 3.0).max(1.0) as u32;
     let interval_ms = number_setting(settings, &["readyCheckIntervalMs"], 2000.0).max(250.0) as u64;
 
     let mut stable_passes = 0_u32;
@@ -7346,7 +7617,9 @@ fn watch_folder_loop(app: tauri::AppHandle, watching: Arc<AtomicBool>) {
             continue;
         };
 
-        let watch_folder = string_setting(&settings, &["watchFolder"]).trim().to_string();
+        let watch_folder = string_setting(&settings, &["watchFolder"])
+            .trim()
+            .to_string();
         if watch_folder.is_empty() {
             thread::sleep(Duration::from_secs(2));
             continue;
@@ -7666,7 +7939,9 @@ fn auth_issuer(settings: &Value) -> String {
 }
 
 fn auth_client_id(settings: &Value) -> String {
-    string_setting(settings, &["auth", "clientId"]).trim().to_string()
+    string_setting(settings, &["auth", "clientId"])
+        .trim()
+        .to_string()
 }
 
 /// A build with no issuer and no client id runs ungated, exactly as the app did
@@ -7675,31 +7950,42 @@ fn auth_is_configured(settings: &Value) -> bool {
     !auth_issuer(settings).is_empty() && !auth_client_id(settings).is_empty()
 }
 
-fn read_auth_file() -> Option<Value> {
-    let path = auth_file_path().ok()?;
-    let raw = fs::read_to_string(path).ok()?;
-    serde_json::from_str::<Value>(&raw).ok()
+fn read_auth_file() -> Result<Option<Value>, String> {
+    if let Some(raw) = secure_read_secret(AUTH_SESSION_KEYCHAIN_ACCOUNT)? {
+        return serde_json::from_str::<Value>(&raw)
+            .map(Some)
+            .map_err(|error| format!("Could not parse the saved sign-in session: {error}"));
+    }
+
+    let path = auth_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let raw = fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    let session = serde_json::from_str::<Value>(&raw)
+        .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
+
+    secure_write_secret(AUTH_SESSION_KEYCHAIN_ACCOUNT, &raw)?;
+    let _ = fs::remove_file(&path);
+    Ok(Some(session))
 }
 
 fn write_auth_file(session: Option<&Value>) -> Result<(), String> {
     let path = auth_file_path()?;
 
     let Some(session) = session else {
+        secure_write_secret(AUTH_SESSION_KEYCHAIN_ACCOUNT, "")?;
         let _ = fs::remove_file(&path);
         return Ok(());
     };
 
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
-    }
-
-    fs::write(
-        &path,
-        serde_json::to_string_pretty(session)
-            .map_err(|error| format!("Could not serialize the session: {error}"))?,
-    )
-    .map_err(|error| format!("Could not write {}: {error}", path.display()))
+    let serialized = serde_json::to_string_pretty(session)
+        .map_err(|error| format!("Could not serialize the session: {error}"))?;
+    secure_write_secret(AUTH_SESSION_KEYCHAIN_ACCOUNT, &serialized)?;
+    let _ = fs::remove_file(&path);
+    Ok(())
 }
 
 /// What the renderer is told. Never includes a token — the host attaches those.
@@ -7749,7 +8035,11 @@ fn emit_auth_update(app: &tauri::AppHandle) {
     let Ok(settings) = load_settings_from_state(&state) else {
         return;
     };
-    let session = state.auth_session.lock().ok().and_then(|value| value.clone());
+    let session = state
+        .auth_session
+        .lock()
+        .ok()
+        .and_then(|value| value.clone());
     let _ = app.emit(
         AUTH_UPDATED_EVENT,
         auth_public_snapshot(&settings, session.as_ref()),
@@ -7759,19 +8049,17 @@ fn emit_auth_update(app: &tauri::AppHandle) {
 /// Reads one HTTP request off the loopback socket and answers it, so the
 /// operator's browser lands on a page saying they can go back to the app.
 fn read_callback_query(mut stream: TcpStream) -> Option<String> {
-    let mut reader = BufReader::new(
-        stream.try_clone().ok()?,
-    );
+    let mut reader = BufReader::new(stream.try_clone().ok()?);
     let mut request_line = String::new();
     reader.read_line(&mut request_line).ok()?;
 
     let target = request_line.split_whitespace().nth(1)?.to_string();
 
-    let body = "<!doctype html><meta charset=\"utf-8\"><title>CSN Media Bridge</title>\
+    let body = "<!doctype html><meta charset=\"utf-8\"><title>Media Bridge</title>\
 <body style=\"margin:0;display:grid;place-items:center;height:100vh;background:#050505;color:#fbfef9;\
 font-family:system-ui,sans-serif\"><div style=\"text-align:center\">\
 <p style=\"font-size:17px;margin:0\">You're signed in.</p>\
-<p style=\"font-size:14px;color:#9a9a9a;margin:10px 0 0\">You can close this tab and go back to CSN Media Bridge.</p>\
+<p style=\"font-size:14px;color:#9a9a9a;margin:10px 0 0\">You can close this tab and go back to Media Bridge.</p>\
 </div>";
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -7851,7 +8139,9 @@ async fn exchange_authorization_code(
             );
         }
 
-        return Err(format!("The sign-in service refused the request ({status}): {text}"));
+        return Err(format!(
+            "The sign-in service refused the request ({status}): {text}"
+        ));
     }
 
     serde_json::from_str::<Value>(&text)
@@ -7961,10 +8251,7 @@ enum RefreshFailure {
 }
 
 /// Trades the refresh token for a new access token when the old one is spent.
-async fn refresh_auth_session(
-    settings: &Value,
-    session: &Value,
-) -> Result<Value, RefreshFailure> {
+async fn refresh_auth_session(settings: &Value, session: &Value) -> Result<Value, RefreshFailure> {
     let refresh_token = trim_string(session.get("refreshToken")).ok_or_else(|| {
         RefreshFailure::Rejected("This session cannot be renewed; sign in again.".to_string())
     })?;
@@ -7999,15 +8286,18 @@ async fn refresh_auth_session(
     let tokens = response.json::<Value>().await.map_err(|error| {
         RefreshFailure::Unreachable(format!("Could not read the renewed session: {error}"))
     })?;
-    let access_token = trim_string(tokens.get("access_token")).ok_or_else(|| {
-        RefreshFailure::Rejected("The renewed session had no token.".to_string())
-    })?;
+    let access_token = trim_string(tokens.get("access_token"))
+        .ok_or_else(|| RefreshFailure::Rejected("The renewed session had no token.".to_string()))?;
     let identity = resolve_identity(&issuer, &access_token).await;
 
     let mut renewed = build_auth_session(&tokens, &identity);
 
     // Clerk does not always rotate the refresh token; keep the old one if so.
-    if renewed.get("refreshToken").map(Value::is_null).unwrap_or(true) {
+    if renewed
+        .get("refreshToken")
+        .map(Value::is_null)
+        .unwrap_or(true)
+    {
         if let Some(map) = renewed.as_object_mut() {
             map.insert("refreshToken".to_string(), json!(refresh_token));
         }
@@ -8015,7 +8305,6 @@ async fn refresh_auth_session(
 
     Ok(renewed)
 }
-
 
 /// Opens the operator's real browser at Clerk, waits on a loopback port for the
 /// redirect, and trades the code for a session.
@@ -8365,7 +8654,7 @@ async fn export_connection_profile(
         .dialog()
         .file()
         .set_title("Export Connection Profile")
-        .set_file_name("csn-media-bridge.connection-profile.json")
+        .set_file_name("media-bridge.connection-profile.json")
         .add_filter("Connection Profile", &["json"])
         .blocking_save_file();
     let Some(path) = picked_file else {
@@ -8386,7 +8675,7 @@ async fn export_connection_profile(
     let normalized_profile_name = profile_name
         .map(|name| name.trim().to_string())
         .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "CSN Media Bridge Connection Profile".to_string());
+        .unwrap_or_else(|| "Media Bridge Connection Profile".to_string());
     let profile = build_connection_profile(&settings, &normalized_profile_name);
     let serialized = serde_json::to_string_pretty(&profile)
         .map_err(|error| format!("Could not serialize connection profile: {error}"))?;
@@ -8482,7 +8771,9 @@ async fn start_watching(
     state: tauri::State<'_, AppState>,
 ) -> Result<Value, String> {
     let settings = load_settings_from_state(&state)?;
-    let watch_folder = string_setting(&settings, &["watchFolder"]).trim().to_string();
+    let watch_folder = string_setting(&settings, &["watchFolder"])
+        .trim()
+        .to_string();
 
     if watch_folder.is_empty() {
         return Err("Choose a folder to watch before starting.".to_string());
@@ -8922,7 +9213,8 @@ async fn repair_stored_video_urls(state: tauri::State<'_, AppState>) -> Result<V
 
     for video in videos {
         let delivery_type = infer_stored_delivery_type(&video);
-        let distribution_object_key = video_str(&video, "distributionObjectKey").unwrap_or_default();
+        let distribution_object_key =
+            video_str(&video, "distributionObjectKey").unwrap_or_default();
 
         let next_manifest_url = if delivery_type == "hls" {
             Some(public_url_for(
@@ -8934,16 +9226,16 @@ async fn repair_stored_video_urls(state: tauri::State<'_, AppState>) -> Result<V
             None
         };
 
-        let next_dash_manifest_url = if delivery_type == "hls" && video_str(&video, "dashManifestUrl").is_some()
-        {
-            Some(public_url_for(
-                &settings,
-                distribution_object_key,
-                Some(DASH_MANIFEST_FILENAME),
-            ))
-        } else {
-            video_str(&video, "dashManifestUrl").map(str::to_string)
-        };
+        let next_dash_manifest_url =
+            if delivery_type == "hls" && video_str(&video, "dashManifestUrl").is_some() {
+                Some(public_url_for(
+                    &settings,
+                    distribution_object_key,
+                    Some(DASH_MANIFEST_FILENAME),
+                ))
+            } else {
+                video_str(&video, "dashManifestUrl").map(str::to_string)
+            };
 
         let next_playback_url = if delivery_type == "hls" {
             next_manifest_url
@@ -9054,7 +9346,9 @@ async fn generate_stored_video_poster_candidates(
 
     let mut candidates = Vec::new();
 
-    for (index, timestamp_seconds) in poster_candidate_times(duration_seconds).into_iter().enumerate()
+    for (index, timestamp_seconds) in poster_candidate_times(duration_seconds)
+        .into_iter()
+        .enumerate()
     {
         let output_path = output_directory.join(format!("poster-candidate-{}.jpg", index + 1));
         run_ffmpeg(&[
@@ -9083,7 +9377,10 @@ async fn generate_stored_video_poster_candidates(
         &state,
         "info",
         "transcode",
-        format!("Pulled {} cover frames from the finished video.", candidates.len()),
+        format!(
+            "Pulled {} cover frames from the finished video.",
+            candidates.len()
+        ),
         None,
     )?;
 
@@ -9100,8 +9397,12 @@ async fn apply_stored_video_poster(
     let settings = load_settings_from_state(&state)?;
     require_convex(&settings)?;
 
-    if string_setting(&settings, &["r2", "bucket"]).trim().is_empty()
-        || string_setting(&settings, &["r2", "accountId"]).trim().is_empty()
+    if string_setting(&settings, &["r2", "bucket"])
+        .trim()
+        .is_empty()
+        || string_setting(&settings, &["r2", "accountId"])
+            .trim()
+            .is_empty()
     {
         return Err(
             "Cloudflare R2 bucket and account settings are required before posters can be saved."
@@ -9109,7 +9410,9 @@ async fn apply_stored_video_poster(
         );
     }
 
-    if string_setting(&settings, &["r2", "accessKeyId"]).trim().is_empty()
+    if string_setting(&settings, &["r2", "accessKeyId"])
+        .trim()
+        .is_empty()
         || string_setting(&settings, &["r2", "secretAccessKey"])
             .trim()
             .is_empty()
@@ -9229,7 +9532,9 @@ async fn retrieve_archived_master(
     request: Value,
 ) -> Result<Value, String> {
     let settings = load_settings_from_state(&state)?;
-    let temp_output_path = string_setting(&settings, &["tempOutputPath"]).trim().to_string();
+    let temp_output_path = string_setting(&settings, &["tempOutputPath"])
+        .trim()
+        .to_string();
 
     if temp_output_path.is_empty() {
         return Err(
@@ -9237,8 +9542,12 @@ async fn retrieve_archived_master(
         );
     }
 
-    if string_setting(&settings, &["b2", "bucket"]).trim().is_empty()
-        || string_setting(&settings, &["b2", "keyId"]).trim().is_empty()
+    if string_setting(&settings, &["b2", "bucket"])
+        .trim()
+        .is_empty()
+        || string_setting(&settings, &["b2", "keyId"])
+            .trim()
+            .is_empty()
         || string_setting(&settings, &["b2", "applicationKey"])
             .trim()
             .is_empty()
@@ -9357,7 +9666,9 @@ async fn trim_clip(
 ) -> Result<Value, String> {
     let source_path = trim_string(request.get("sourcePath"))
         .ok_or_else(|| "Choose a video before exporting a clip.".to_string())?;
-    let in_point_seconds = value_to_f64(request.get("inPointSeconds")).unwrap_or(0.0).max(0.0);
+    let in_point_seconds = value_to_f64(request.get("inPointSeconds"))
+        .unwrap_or(0.0)
+        .max(0.0);
     let out_point_seconds = value_to_f64(request.get("outPointSeconds"))
         .unwrap_or(0.0)
         .max(in_point_seconds);
@@ -9664,7 +9975,8 @@ async fn list_live_stream_handoff_jobs(
 /// matters most is a deployment that has not had the handoff functions added
 /// yet — Convex's own wording for that reads like a crash.
 fn plain_handoff_error(error: &str) -> String {
-    if error.contains("Could not find public function") || error.contains("Could not find function") {
+    if error.contains("Could not find public function") || error.contains("Could not find function")
+    {
         return "The library does not support live recordings yet. The backend work is described in docs/LIVE_RECORDING_HANDOFF.md in the CSN sports app.".to_string();
     }
     error.to_string()
@@ -9673,10 +9985,14 @@ fn plain_handoff_error(error: &str) -> String {
 /// Everything a claim needs before it is worth asking the library for a job.
 fn handoff_claim_preconditions(settings: &Value) -> Result<(), String> {
     if !convex_is_configured(settings) {
-        return Err("Connect the library in Settings before converting live recordings.".to_string());
+        return Err(
+            "Connect the library in Settings before converting live recordings.".to_string(),
+        );
     }
     if !storage_is_configured(settings) {
-        return Err("Set up cloud storage in Settings before converting live recordings.".to_string());
+        return Err(
+            "Set up cloud storage in Settings before converting live recordings.".to_string(),
+        );
     }
     Ok(())
 }
@@ -9735,7 +10051,10 @@ async fn start_claimed_handoff(
 }
 
 /// Refreshes the cached queue from the library and tells the window.
-async fn refresh_handoff_jobs(app: &tauri::AppHandle, settings: &Value) -> Result<Vec<Value>, String> {
+async fn refresh_handoff_jobs(
+    app: &tauri::AppHandle,
+    settings: &Value,
+) -> Result<Vec<Value>, String> {
     let response = call_convex_query(
         settings,
         LIVE_HANDOFF_LIST_RECENT_QUERY,
@@ -9762,7 +10081,13 @@ async fn refresh_handoff_jobs(app: &tauri::AppHandle, settings: &Value) -> Resul
                     .filter(|local| {
                         matches!(
                             local.get("status").and_then(Value::as_str),
-                            Some("claimed" | "downloading" | "processing" | "uploading" | "registering")
+                            Some(
+                                "claimed"
+                                    | "downloading"
+                                    | "processing"
+                                    | "uploading"
+                                    | "registering"
+                            )
                         )
                     })
                     .cloned()
@@ -9800,7 +10125,9 @@ async fn claim_next_handoff(
         return Ok(None);
     };
 
-    start_claimed_handoff(app, slot, claimed_job, node_key).await.map(Some)
+    start_claimed_handoff(app, slot, claimed_job, node_key)
+        .await
+        .map(Some)
 }
 
 #[tauri::command]
@@ -9881,7 +10208,8 @@ fn live_handoff_loop(app: tauri::AppHandle) {
             let outcome = tauri::async_runtime::block_on(async {
                 refresh_handoff_jobs(&app, &settings).await?;
 
-                let auto_convert = bool_setting(&settings, &["liveRecordings", "autoConvert"], false);
+                let auto_convert =
+                    bool_setting(&settings, &["liveRecordings", "autoConvert"], false);
                 let idle = !state.live_handoff_running.load(Ordering::SeqCst);
                 if auto_convert && idle && storage_is_configured(&settings) {
                     if let Some(claimed_job_id) = claim_next_handoff(&app, &settings).await? {
@@ -9913,7 +10241,14 @@ fn live_handoff_loop(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let settings = read_settings_file().unwrap_or_else(|_| default_settings());
+    let settings = read_settings_file().unwrap_or_else(|error| {
+        eprintln!("Could not load saved settings: {error}");
+        default_settings()
+    });
+    let auth_session = read_auth_file().unwrap_or_else(|error| {
+        eprintln!("Could not load saved sign-in session: {error}");
+        None
+    });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -9935,7 +10270,7 @@ pub fn run() {
             offload_cancel: Arc::new(AtomicBool::new(false)),
             watching: Arc::new(AtomicBool::new(false)),
             pending_update: Mutex::new(None),
-            auth_session: Mutex::new(read_auth_file()),
+            auth_session: Mutex::new(auth_session),
             app_update: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
@@ -10052,7 +10387,10 @@ pub fn run() {
                 if !bool_setting(&settings, &["autoWatch"], true) {
                     return;
                 }
-                if string_setting(&settings, &["watchFolder"]).trim().is_empty() {
+                if string_setting(&settings, &["watchFolder"])
+                    .trim()
+                    .is_empty()
+                {
                     return;
                 }
                 if state.watching.swap(true, Ordering::SeqCst) {
@@ -10081,7 +10419,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running CSN Media Bridge Tauri host");
+        .expect("error while running Media Bridge Tauri host");
 }
 
 #[cfg(test)]
@@ -10124,10 +10462,7 @@ mod tests {
 
     #[test]
     fn sigv4_signing_key_matches_the_aws_reference_vector() {
-        let date_key = hmac_sha256(
-            b"AWS4wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-            "20120215",
-        );
+        let date_key = hmac_sha256(b"AWS4wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "20120215");
         let region_key = hmac_sha256(&date_key, "us-east-1");
         let service_key = hmac_sha256(&region_key, "iam");
         let signing_key = hmac_sha256(&service_key, "aws4_request");
@@ -10169,13 +10504,72 @@ mod tests {
     #[test]
     fn poster_keys_follow_the_storage_layout() {
         assert_eq!(
+            resolve_poster_object_key("videos/abc123/"),
+            "posters/abc123/default.jpg"
+        );
+        assert_eq!(
             resolve_poster_object_key("streaming/vod/abc123/"),
-            "posters/abc123/poster.jpg"
+            "posters/abc123/default.jpg"
         );
         assert_eq!(
             resolve_poster_object_key("vod/hls/legacy-job"),
             "vod/hls/legacy-job/poster.jpg"
         );
+    }
+
+    #[test]
+    fn canonical_storage_keys_use_the_videos_prefix() {
+        let settings = json!({ "storage": { "layout": "canonical" } });
+        let job = json!({
+            "id": "job_123456789",
+            "sourceName": "Game Recap.mov",
+            "sourcePath": "/tmp/Game Recap.mov",
+            "projectName": "Centex Sports",
+            "recordedAt": "2026-09-15T19:30:00Z",
+        });
+        let plan = build_storage_key_plan(
+            &settings,
+            &job,
+            "sha256:a1b2c3d4e5f607189999aaaabbbbccccddddeeeeffff00001111222233334444",
+        );
+
+        assert_eq!(plan["assetKey"], "a1b2c3d4e5f60718");
+        assert_eq!(plan["distributionObjectKey"], "videos/a1b2c3d4e5f60718");
+        assert_eq!(
+            plan["posterObjectKey"],
+            "posters/a1b2c3d4e5f60718/default.jpg"
+        );
+        assert_eq!(
+            plan["archiveObjectKey"],
+            "masters/centex-sports/2026-09-15/a1b2c3d4e5f60718/Game_Recap.mov"
+        );
+    }
+
+    #[test]
+    fn dash_manifest_uses_named_video_rendition_paths() {
+        let output_directory = std::env::temp_dir().join(create_id("csn-dash-manifest-test", 1));
+        let reference_playlist_directory = output_directory.join("video").join("1080p_6000k");
+        fs::create_dir_all(&reference_playlist_directory).unwrap();
+        fs::write(
+            reference_playlist_directory.join("stream.m3u8"),
+            "#EXTM3U\n#EXTINF:2.000,\nchunk_00001.m4s\n#EXTINF:2.000,\nchunk_00002.m4s\n",
+        )
+        .unwrap();
+
+        let manifest_path = write_dash_manifest(&output_directory, 4.0, true).unwrap();
+        let manifest = fs::read_to_string(manifest_path).unwrap();
+        let _ = fs::remove_dir_all(output_directory);
+
+        assert!(manifest.contains("id=\"1080p_6000k\""), "{manifest}");
+        assert!(
+            manifest.contains("initialization=\"video/$RepresentationID$/init.mp4\""),
+            "{manifest}"
+        );
+        assert!(
+            manifest.contains("media=\"video/$RepresentationID$/chunk_$Number%05d$.m4s\""),
+            "{manifest}"
+        );
+        assert!(manifest.contains("startNumber=\"1\""), "{manifest}");
     }
 
     /// A record states its delivery type when it knows it, and is read from its
@@ -10213,7 +10607,10 @@ mod tests {
     /// The setting picks the encoder; "Automatic" defers to the platform.
     #[test]
     fn the_encoder_setting_wins_over_the_platform_default() {
-        assert_eq!(effective_encoder(&json!({ "hardwareEncoderOverride": "nvenc" })), "nvenc");
+        assert_eq!(
+            effective_encoder(&json!({ "hardwareEncoderOverride": "nvenc" })),
+            "nvenc"
+        );
         assert_eq!(
             effective_encoder(&json!({ "hardwareEncoderOverride": "videotoolbox" })),
             "videotoolbox"
@@ -10224,13 +10621,16 @@ mod tests {
         );
 
         let automatic = effective_encoder(&json!({ "hardwareEncoderOverride": "auto" }));
-        assert_eq!(automatic, if cfg!(target_os = "windows") {
-            "nvenc"
-        } else if cfg!(target_os = "macos") {
-            "videotoolbox"
-        } else {
-            "software"
-        });
+        assert_eq!(
+            automatic,
+            if cfg!(target_os = "windows") {
+                "nvenc"
+            } else if cfg!(target_os = "macos") {
+                "videotoolbox"
+            } else {
+                "software"
+            }
+        );
     }
 
     /// Hardware encoders have no CRF equivalent, so progressive output has to
@@ -10253,8 +10653,14 @@ mod tests {
         // The HLS ladder sets its own per-rung bitrate, so these must not.
         for encoder in ["software", "videotoolbox", "nvenc"] {
             let options = hls_video_options(encoder);
-            assert!(!options.contains(&"-b:v".to_string()), "{encoder} set a bitrate");
-            assert!(!options.contains(&"-crf".to_string()), "{encoder} set a CRF");
+            assert!(
+                !options.contains(&"-b:v".to_string()),
+                "{encoder} set a bitrate"
+            );
+            assert!(
+                !options.contains(&"-crf".to_string()),
+                "{encoder} set a CRF"
+            );
         }
 
         // CUDA decode only makes sense on the NVIDIA path.
@@ -10372,10 +10778,16 @@ mod tests {
             head.contains("content-type: application/x-www-form-urlencoded"),
             "token request must be form encoded, got headers:\n{head}"
         );
-        assert!(!head.contains("application/json"), "must not send a JSON body");
+        assert!(
+            !head.contains("application/json"),
+            "must not send a JSON body"
+        );
 
         // Every parameter PKCE needs, and no client secret.
-        assert!(body.contains("grant_type=authorization_code"), "body: {body}");
+        assert!(
+            body.contains("grant_type=authorization_code"),
+            "body: {body}"
+        );
         assert!(body.contains("code=the-code"), "body: {body}");
         assert!(body.contains("code_verifier=the-verifier"), "body: {body}");
         assert!(body.contains("client_id=client-abc"), "body: {body}");
@@ -10393,9 +10805,12 @@ mod tests {
     /// no network at all.
     #[test]
     fn only_a_refusal_ends_a_session_not_an_unreachable_service() {
-        let ends_session = |failure: &RefreshFailure| matches!(failure, RefreshFailure::Rejected(_));
+        let ends_session =
+            |failure: &RefreshFailure| matches!(failure, RefreshFailure::Rejected(_));
 
-        assert!(!ends_session(&RefreshFailure::Unreachable("dns failed".into())));
+        assert!(!ends_session(&RefreshFailure::Unreachable(
+            "dns failed".into()
+        )));
         assert!(ends_session(&RefreshFailure::Rejected("expired".into())));
     }
 
@@ -10421,7 +10836,10 @@ mod tests {
             "season_opener.mov did not copy cleanly",
             "no space left on device",
         ] {
-            assert!(!is_transient_failure(permanent), "should not retry: {permanent}");
+            assert!(
+                !is_transient_failure(permanent),
+                "should not retry: {permanent}"
+            );
         }
     }
 
@@ -10443,9 +10861,15 @@ mod tests {
             .map(retry_delay_seconds)
             .collect();
 
-        assert!(delays.windows(2).all(|pair| pair[0] < pair[1]), "{delays:?}");
+        assert!(
+            delays.windows(2).all(|pair| pair[0] < pair[1]),
+            "{delays:?}"
+        );
         // Past the end it holds at the longest wait rather than growing forever.
-        assert_eq!(retry_delay_seconds(99), *JOB_RETRY_BACKOFF_SECONDS.last().unwrap());
+        assert_eq!(
+            retry_delay_seconds(99),
+            *JOB_RETRY_BACKOFF_SECONDS.last().unwrap()
+        );
     }
 
     #[test]
@@ -10465,8 +10889,8 @@ mod tests {
         let finished = json!({
             "sourceName": "game.mp4",
             "archiveObjectKey": "masters/x/2026-09-13/abc/game.mp4",
-            "distributionObjectKey": "streaming/vod/abc",
-            "publicUrl": "https://media.example/streaming/vod/abc/master.m3u8",
+            "distributionObjectKey": "videos/abc",
+            "publicUrl": "https://media.example/videos/abc/master.m3u8",
         });
 
         let ordinary = build_convex_payload(&finished, "ready").unwrap();
@@ -10508,8 +10932,19 @@ mod tests {
         );
         assert!(keys.sidecar.ends_with("/temple-vs-belton-game-1.json"));
 
-        let unassigned = stream_archive_keys("ea95132c15732412d22c1476fa83f27a", None, None, Some("2026-09-12"));
-        assert!(unassigned.video.starts_with("masters/unassigned/2026-09-12/"), "{}", unassigned.video);
+        let unassigned = stream_archive_keys(
+            "ea95132c15732412d22c1476fa83f27a",
+            None,
+            None,
+            Some("2026-09-12"),
+        );
+        assert!(
+            unassigned
+                .video
+                .starts_with("masters/unassigned/2026-09-12/"),
+            "{}",
+            unassigned.video
+        );
 
         // Paths are relative to masters/, as lsjson reports them.
         let listing = json!([
@@ -10518,7 +10953,10 @@ mod tests {
             { "Path": "mcc-volleyball/2026-09-12/09d9fcf20d5272c4/MCC_Volleyball.mp4" },
             { "Path": "loose.mp4" },
         ]);
-        assert_eq!(archived_stream_uids(&listing), vec!["ea95132c15732412d22c1476fa83f27a".to_string()]);
+        assert_eq!(
+            archived_stream_uids(&listing),
+            vec!["ea95132c15732412d22c1476fa83f27a".to_string()]
+        );
     }
 
     #[test]
@@ -10533,7 +10971,10 @@ mod tests {
         let missing = plain_handoff_error(
             "Could not find public function for 'media/liveStream:listRecentHandoffJobs'. Did you forget to run `npx convex dev`?",
         );
-        assert!(missing.contains("does not support live recordings yet"), "{missing}");
+        assert!(
+            missing.contains("does not support live recordings yet"),
+            "{missing}"
+        );
         assert!(!missing.contains("npx convex"), "{missing}");
 
         // Anything else is the library's own words, untouched.
@@ -10545,7 +10986,11 @@ mod tests {
 
     #[test]
     fn stations_do_not_convert_live_recordings_until_asked() {
-        assert!(!bool_setting(&default_settings(), &["liveRecordings", "autoConvert"], true));
+        assert!(!bool_setting(
+            &default_settings(),
+            &["liveRecordings", "autoConvert"],
+            true
+        ));
     }
 
     /// Storage credentials are scoped to object prefixes, so any bucket-level
@@ -10562,7 +11007,11 @@ mod tests {
             "r2": { "accessKeyId": "id", "secretAccessKey": "secret", "accountId": "acct" },
         }));
 
-        assert_eq!(config.matches("no_check_bucket = true").count(), 2, "{config}");
+        assert_eq!(
+            config.matches("no_check_bucket = true").count(),
+            2,
+            "{config}"
+        );
     }
 
     /// The credential cache is a process global, so these scenarios share state
@@ -10616,6 +11065,64 @@ mod tests {
         assert!(!config.contains("stale"), "{config}");
 
         store_brokered_credentials(None);
+    }
+
+    #[test]
+    fn settings_secrets_are_redacted_for_disk_and_hydrated_from_secure_storage() {
+        test_keychain().lock().unwrap().clear();
+        let settings = normalize_settings_value(json!({
+            "b2": { "keyId": "b2-id", "applicationKey": "b2-secret" },
+            "r2": {
+                "accessKeyId": "r2-id",
+                "secretAccessKey": "r2-secret",
+            },
+            "convex": { "nodeToken": "library-token" },
+            "broker": { "token": "station-token" },
+        }));
+
+        store_settings_secrets(&settings).unwrap();
+        let redacted = redact_secret_settings(settings.clone());
+
+        for (path, _) in SECRET_SETTING_PATHS {
+            assert_eq!(string_setting(&redacted, path), "");
+        }
+        assert_eq!(
+            string_setting(
+                &hydrate_settings_secrets(redacted).unwrap(),
+                &["b2", "keyId"]
+            ),
+            "b2-id"
+        );
+        assert_eq!(
+            string_setting(
+                &hydrate_settings_secrets(settings.clone()).unwrap(),
+                &["broker", "token"]
+            ),
+            "station-token"
+        );
+    }
+
+    #[test]
+    fn clearing_a_secret_removes_it_from_secure_storage() {
+        test_keychain().lock().unwrap().clear();
+        let with_secret = normalize_settings_value(json!({
+            "broker": { "token": "station-token" },
+        }));
+        store_settings_secrets(&with_secret).unwrap();
+        assert_eq!(
+            secure_read_secret("settings.broker.token")
+                .unwrap()
+                .as_deref(),
+            Some("station-token")
+        );
+
+        let cleared = normalize_settings_value(json!({
+            "broker": { "token": "" },
+        }));
+        store_settings_secrets(&cleared).unwrap();
+        assert!(secure_read_secret("settings.broker.token")
+            .unwrap()
+            .is_none());
     }
 
     /// Credentials must never be attached to a URL that is not the broker's own
@@ -10672,7 +11179,7 @@ mod tests {
     fn media_credentials_are_scoped_to_the_brokers_media_route() {
         // A URL elsewhere gets nothing, even when it looks close.
         assert!(broker_media_credentials("https://example.org/media/x.m3u8").is_none());
-        assert!(broker_media_credentials("https://cdn.csn.com/streaming/vod/a/x.m3u8").is_none());
+        assert!(broker_media_credentials("https://cdn.csn.com/videos/a/x.m3u8").is_none());
     }
 
     /// Playback only reroutes when it is switched on and the broker is set, and
@@ -10685,7 +11192,7 @@ mod tests {
             "r2": { "publicBaseUrl": "https://cdn.csn.com" },
         });
         assert_eq!(
-            broker_media_url(&off, "https://cdn.csn.com/streaming/vod/abc/master.m3u8"),
+            broker_media_url(&off, "https://cdn.csn.com/videos/abc/master.m3u8"),
             None
         );
 
@@ -10694,8 +11201,8 @@ mod tests {
             "r2": { "publicBaseUrl": "https://cdn.csn.com" },
         });
         assert_eq!(
-            broker_media_url(&on, "https://cdn.csn.com/streaming/vod/abc/master.m3u8").as_deref(),
-            Some("https://b.example.com/media/streaming/vod/abc/master.m3u8")
+            broker_media_url(&on, "https://cdn.csn.com/videos/abc/master.m3u8").as_deref(),
+            Some("https://b.example.com/media/videos/abc/master.m3u8")
         );
 
         // A URL from somewhere else is not ours to reroute.
@@ -10709,14 +11216,16 @@ mod tests {
             "r2": { "publicBaseUrl": "https://cdn.csn.com" },
         });
         assert_eq!(
-            broker_media_url(&no_token, "https://cdn.csn.com/streaming/vod/abc/master.m3u8"),
+            broker_media_url(&no_token, "https://cdn.csn.com/videos/abc/master.m3u8"),
             None
         );
     }
 
     #[test]
     fn the_broker_is_off_until_both_values_are_set() {
-        assert!(!broker_is_configured(&json!({ "broker": { "url": "", "token": "" } })));
+        assert!(!broker_is_configured(
+            &json!({ "broker": { "url": "", "token": "" } })
+        ));
         assert!(!broker_is_configured(
             &json!({ "broker": { "url": "https://broker.example.com", "token": "" } })
         ));
@@ -10763,8 +11272,14 @@ mod tests {
             query_value("code_verifier=wrong&code=right", "code").as_deref(),
             Some("right")
         );
-        assert_eq!(query_value("code=a%2Bb%2Fc", "code").as_deref(), Some("a+b/c"));
-        assert_eq!(query_value("error=access+denied", "error").as_deref(), Some("access denied"));
+        assert_eq!(
+            query_value("code=a%2Bb%2Fc", "code").as_deref(),
+            Some("a+b/c")
+        );
+        assert_eq!(
+            query_value("error=access+denied", "error").as_deref(),
+            Some("access denied")
+        );
         assert_eq!(query_value("code=abc", "state"), None);
     }
 
@@ -10793,7 +11308,9 @@ mod tests {
     /// before sign-in existed.
     #[test]
     fn auth_is_off_until_both_values_are_set() {
-        assert!(!auth_is_configured(&json!({ "auth": { "issuer": "", "clientId": "" } })));
+        assert!(!auth_is_configured(
+            &json!({ "auth": { "issuer": "", "clientId": "" } })
+        ));
         assert!(!auth_is_configured(
             &json!({ "auth": { "issuer": "https://clerk.example.com", "clientId": "" } })
         ));
@@ -10805,7 +11322,8 @@ mod tests {
     /// The renderer must never receive a token.
     #[test]
     fn the_public_snapshot_withholds_tokens() {
-        let settings = json!({ "auth": { "issuer": "https://clerk.example.com", "clientId": "abc" } });
+        let settings =
+            json!({ "auth": { "issuer": "https://clerk.example.com", "clientId": "abc" } });
         let session = json!({
             "accessToken": "super-secret",
             "refreshToken": "also-secret",
@@ -10825,7 +11343,10 @@ mod tests {
 
     #[test]
     fn webp_copies_replace_the_image_extension() {
-        assert_eq!(to_webp_relative_path("DCIM/100/IMG_0042.JPG"), "DCIM/100/IMG_0042.webp");
+        assert_eq!(
+            to_webp_relative_path("DCIM/100/IMG_0042.JPG"),
+            "DCIM/100/IMG_0042.webp"
+        );
         assert_eq!(to_webp_relative_path("shot.jpeg"), "shot.webp");
         assert_eq!(to_webp_relative_path("clip.mov"), "clip.mov.webp");
     }
@@ -10861,7 +11382,7 @@ mod tests {
             "Playback package",
             "r2",
             "bucket",
-            "streaming/vod/abc",
+            "videos/abc",
             None,
             false,
             Vec::new(),
@@ -10876,25 +11397,31 @@ mod tests {
             "Playback package",
             "r2",
             "bucket",
-            "streaming/vod/abc",
+            "videos/abc",
             None,
             false,
             Vec::new(),
-            vec![json!({ "objectKey": "streaming/vod/abc/master.m3u8", "sizeBytes": 12 })],
+            vec![json!({ "objectKey": "videos/abc/master.m3u8", "sizeBytes": 12 })],
         );
-        assert_eq!(summarize_upload_audit("game.mov", &[&remote_only]).0, "partial");
+        assert_eq!(
+            summarize_upload_audit("game.mov", &[&remote_only]).0,
+            "partial"
+        );
 
         let matching = build_upload_audit_section(
             "Playback package",
             "r2",
             "bucket",
-            "streaming/vod/abc",
+            "videos/abc",
             Some("/tmp/out"),
             true,
-            vec![json!({ "objectKey": "streaming/vod/abc/master.m3u8", "sizeBytes": 12 })],
-            vec![json!({ "objectKey": "streaming/vod/abc/master.m3u8", "sizeBytes": 12 })],
+            vec![json!({ "objectKey": "videos/abc/master.m3u8", "sizeBytes": 12 })],
+            vec![json!({ "objectKey": "videos/abc/master.m3u8", "sizeBytes": 12 })],
         );
-        assert_eq!(summarize_upload_audit("game.mov", &[&matching]).0, "healthy");
+        assert_eq!(
+            summarize_upload_audit("game.mov", &[&matching]).0,
+            "healthy"
+        );
     }
 
     #[test]
@@ -10903,30 +11430,30 @@ mod tests {
             "Playback package",
             "r2",
             "bucket",
-            "streaming/vod/abc",
+            "videos/abc",
             Some("/tmp/out"),
             true,
             vec![
-                json!({ "objectKey": "streaming/vod/abc/master.m3u8", "sizeBytes": 12 }),
-                json!({ "objectKey": "streaming/vod/abc/seg_1.m4s", "sizeBytes": 900 }),
+                json!({ "objectKey": "videos/abc/master.m3u8", "sizeBytes": 12 }),
+                json!({ "objectKey": "videos/abc/video/1080p_6000k/chunk_00001.m4s", "sizeBytes": 900 }),
             ],
             vec![
-                json!({ "objectKey": "streaming/vod/abc/master.m3u8", "sizeBytes": 7 }),
-                json!({ "objectKey": "streaming/vod/abc/stray.tmp", "sizeBytes": 1 }),
+                json!({ "objectKey": "videos/abc/master.m3u8", "sizeBytes": 7 }),
+                json!({ "objectKey": "videos/abc/stray.tmp", "sizeBytes": 1 }),
             ],
         );
 
         assert_eq!(
             section["missingObjectKeys"],
-            json!(["streaming/vod/abc/seg_1.m4s"])
+            json!(["videos/abc/video/1080p_6000k/chunk_00001.m4s"])
         );
         assert_eq!(
             section["sizeMismatchObjectKeys"],
-            json!(["streaming/vod/abc/master.m3u8"])
+            json!(["videos/abc/master.m3u8"])
         );
         assert_eq!(
             section["unexpectedObjectKeys"],
-            json!(["streaming/vod/abc/stray.tmp"])
+            json!(["videos/abc/stray.tmp"])
         );
         assert_eq!(summarize_upload_audit("game.mov", &[&section]).0, "partial");
     }

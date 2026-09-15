@@ -20,7 +20,7 @@ import type { AppSettings } from '../shared/types';
  * The essentials are here: the folders, how videos get encoded, what the app
  * does on its own, and whether the cloud accounts are connected. Everything a
  * pipeline engineer sets once — buckets, prefixes, keys, ready-check passes,
- * the update feed — lives under one "Show advanced settings" disclosure, in the
+ * the update feed — lives under one "Show support settings" disclosure, in the
  * same hairline rows but in the machine voice. See design.md §4.
  */
 
@@ -78,6 +78,9 @@ const ENCODER_OPTIONS: { value: AppSettings['hardwareEncoderOverride']; label: s
   { value: 'software', label: 'Software — slowest, best quality' },
 ];
 
+const SUPPORT_SETTINGS_ENABLED =
+  typeof __SUPPORT_SETTINGS_ENABLED__ === 'boolean' ? __SUPPORT_SETTINGS_ENABLED__ : false;
+
 export default function SettingsPage() {
   const {
     settings,
@@ -93,7 +96,7 @@ export default function SettingsPage() {
   const isAuthConfigured = authStatus !== 'unconfigured';
 
   const [draft, setDraft] = useState<AppSettings>(settings);
-  const [expert, setExpert] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
     setDraft(settings);
@@ -132,7 +135,7 @@ export default function SettingsPage() {
   }
 
   async function handleExport() {
-    const result = await exportConnectionProfile('CSN Media Bridge Connection Profile');
+    const result = await exportConnectionProfile('Media Bridge Connection Profile');
     if (!result.canceled) {
       flash('Exported — secrets were left out');
     }
@@ -157,10 +160,34 @@ export default function SettingsPage() {
           <PageHeading
             title="Settings"
             subhead="The essentials are here. Everything else has a sensible default."
+            action={
+              <ToneChip tone={dirty ? 'live' : 'neutral'}>
+                {dirty ? 'Unsaved changes' : 'Saved'}
+              </ToneChip>
+            }
           />
         </div>
 
         <div className="flex max-w-[700px] flex-col gap-5 px-[30px] pt-6">
+          {dirty ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="sticky top-3 z-20 flex flex-wrap items-center gap-3 rounded-card border border-accent bg-ink px-4 py-3 text-[13px] text-pretty text-paper shadow-live"
+            >
+              <span className="min-w-[220px] flex-1">
+                Changes are only in this draft. Save changes before leaving Settings.
+              </span>
+              <button
+                type="submit"
+                disabled={isSavingSettings}
+                className="csn-btn-primary"
+              >
+                {isSavingSettings ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          ) : null}
+
           <Group title="Folders">
             <Row
               label="Watch this folder"
@@ -313,14 +340,12 @@ export default function SettingsPage() {
               </>
             ) : (
               <div className="csn-hair-row px-4 py-3.5 text-[13px] text-pretty text-quiet">
-                This station has no sign-in. Anyone at this machine can use every screen. Set the
-                sign-in address and client id under advanced settings, or ship a build with them
-                baked in, to turn it on.
+                This station does not require sign-in. Anyone at this machine can use every screen.
               </div>
             )}
           </Group>
 
-          <Group title="Cloud accounts">
+          <Group title="Connections">
             <Row
               label="Archive storage"
               hint="Keeps the original camera file, permanently."
@@ -334,29 +359,31 @@ export default function SettingsPage() {
                 {playbackConnected ? 'Connected' : 'Not set up'}
               </ToneChip>
             </Row>
-            <Row label="Library database" hint="Where video records live.">
+            <Row label="Media library" hint="Where video records live.">
               <ToneChip tone={libraryConnected ? 'neutral' : 'quiet'}>
                 {libraryConnected ? 'Connected' : 'Not set up'}
               </ToneChip>
             </Row>
           </Group>
 
-          <div>
-            <Disclosure
-              open={expert}
-              onToggle={() => setExpert((open) => !open)}
-              showLabel="Show advanced settings"
-              hideLabel="Hide advanced settings"
-            />
-          </div>
+          {SUPPORT_SETTINGS_ENABLED ? (
+            <div>
+              <Disclosure
+                open={supportOpen}
+                onToggle={() => setSupportOpen((open) => !open)}
+                showLabel="Show support settings"
+                hideLabel="Hide support settings"
+              />
+            </div>
+          ) : null}
 
-          {expert ? (
+          {SUPPORT_SETTINGS_ENABLED && supportOpen ? (
             <>
-              <Group title="Team connection profile">
+              <Group title="Connection profile">
                 <div className="csn-hair-row flex flex-wrap items-center gap-3.5 px-4 py-3.5">
                   <div className="min-w-[170px] flex-[1_1_220px] text-[13px] text-pretty text-body">
-                    Shared backend coordinates load in one step. Buckets, endpoints and function
-                    paths travel in the profile; this workstation’s keys never do.
+                    Shared connection details load in one step. This workstation’s secret keys
+                    never travel in the profile.
                   </div>
                   <div className="flex flex-none gap-2">
                     <GhostButton onClick={() => void handleImport()} disabled={isSavingSettings}>
@@ -394,11 +421,11 @@ export default function SettingsPage() {
                   />
                 </FieldRow>
                 <Row
-                  label="Stream playback through the broker"
-                  hint="Needed before the playback bucket can be made private. Turn this on only once the broker is deployed — and note the CSN web app reads the same files."
+                  label="Route playback through the broker"
+                  hint="Needed before playback storage can be made private. Turn this on only once the connected viewer portal is ready."
                 >
                   <Toggle
-                    label="Stream playback through the broker"
+                    label="Route playback through the broker"
                     checked={draft.broker.streamMedia}
                     onChange={(next) =>
                       setDraft({ ...draft, broker: { ...draft.broker, streamMedia: next } })
@@ -407,7 +434,7 @@ export default function SettingsPage() {
                 </Row>
               </Group>
 
-              <Group title="Archive — Backblaze B2">
+              <Group title="Archive storage">
                 <FieldRow label="Bucket">
                   <input
                     value={draft.b2.bucket}
@@ -472,7 +499,7 @@ export default function SettingsPage() {
                 </FieldRow>
               </Group>
 
-              <Group title="Playback — Cloudflare R2">
+              <Group title="Playback storage">
                 <FieldRow label="Account ID">
                   <input
                     value={draft.r2.accountId}
@@ -533,7 +560,7 @@ export default function SettingsPage() {
                 </FieldRow>
               </Group>
 
-              <Group title="Sign-in — Clerk">
+              <Group title="Sign-in provider">
                 <FieldRow label="Sign-in address">
                   <input
                     value={draft.auth.issuer}
@@ -555,7 +582,7 @@ export default function SettingsPage() {
                 </FieldRow>
               </Group>
 
-              <Group title="Database — Convex">
+              <Group title="Media library">
                 <FieldRow label="Deployment">
                   <input
                     value={draft.convex.deploymentUrl}
@@ -727,7 +754,7 @@ export default function SettingsPage() {
                         appUpdates: { ...draft.appUpdates, baseUrl: event.target.value },
                       })
                     }
-                    placeholder="https://downloads.example.com/csn-media-bridge"
+                    placeholder="https://jamalgillis.github.io/CsnMediaBridge"
                     className="csn-input"
                   />
                 </FieldRow>
@@ -760,12 +787,17 @@ export default function SettingsPage() {
             </>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 pb-2 pt-2">
+          <div
+            id="settings-save-actions"
+            className={`flex flex-wrap items-center gap-3 rounded-card border px-4 py-3 transition-colors ${
+              dirty ? 'border-accent bg-accent/[.08]' : 'border-rule bg-transparent'
+            }`}
+          >
             <button type="submit" disabled={isSavingSettings || !dirty} className="csn-btn-primary">
-              {isSavingSettings ? 'Saving…' : 'Save changes'}
+              {isSavingSettings ? 'Saving…' : dirty ? 'Save unsaved changes' : 'Saved'}
             </button>
             <span className="text-caption text-muted">
-              {dirty ? 'You have unsaved changes.' : 'Everything here is saved.'}
+              {dirty ? 'These changes are not saved yet.' : 'Everything here is saved.'}
             </span>
           </div>
         </div>

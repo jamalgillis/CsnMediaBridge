@@ -11,7 +11,7 @@ export default function TitleBar() {
     <div className="drag flex h-titlebar flex-none items-center gap-3 border-b border-rule bg-ink-panel px-3.5">
       <div className="w-[78px] flex-none" />
       <div className="min-w-0 flex-1 truncate text-center font-condensed text-[12px] font-bold uppercase tracking-[.12em] text-muted">
-        CSN Media Bridge
+        Media Bridge
       </div>
       <div className="w-[78px] flex-none" />
     </div>

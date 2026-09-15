@@ -345,7 +345,7 @@ Deliverables:
   and delete operations
 - preserve canonical storage layout:
   - B2 masters under `masters/...`
-  - R2 VOD under `streaming/vod/...`
+  - R2 VOD under `videos/...`
   - R2 posters under `posters/...`
   - social staging under `staging/social/...`
   - protected scheduled social under `scheduled/social/...`

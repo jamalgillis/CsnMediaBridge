@@ -32,7 +32,7 @@ Add an abort rule for incomplete multipart uploads (1 day) on the whole bucket
 while you are in there — orphaned multipart parts are billed and invisible in
 the object listing.
 
-Do **not** add a rule covering `streaming/` or `posters/`. A bucket-wide expiry
+Do **not** add a rule covering `videos/` or `posters/`. A bucket-wide expiry
 rule will silently delete your published VOD library.
 
 *Blocks:* automated cost control. Without it the app still deletes on the happy
@@ -93,7 +93,7 @@ has already served the same objects. Verify with an origin-aware request:
 ```bash
 curl -I \
   -H "Origin: https://www.centexsportsnetwork.com" \
-  https://media.centexsportsnetwork.com/vod/hls/<asset-key>/master.m3u8
+  https://media.centexsportsnetwork.com/videos/<asset-key>/master.m3u8
 ```
 
 The response should include `access-control-allow-origin`. Without that header,

@@ -1097,13 +1097,13 @@ function getEmptyLibraryCopy(hasConvexConfig: boolean) {
   if (hasConvexConfig) {
     return {
       title: 'No stored videos yet',
-      body: 'Once videos are registered in Convex, they will appear here for browsing, sorting, and management.',
+      body: 'Once videos are registered in the media library, they will appear here for browsing, sorting, and management.',
     };
   }
 
   return {
-    title: 'Convex connection needed',
-    body: 'Add your Convex deployment URL and mutation path in Settings so the library can load stored content.',
+    title: 'Media library connection needed',
+    body: 'Add the media library connection in Settings so stored content can load here.',
   };
 }
 
@@ -1766,9 +1766,9 @@ export default function PlayerPage() {
     }
 
     const deleteTargets = [
-      'the Convex library record',
-      selectedVideo.distributionObjectKey ? 'the R2 playback package' : null,
-      selectedVideo.archiveObjectKey ? 'the B2 archive file' : null,
+      'the media library record',
+      selectedVideo.distributionObjectKey ? 'the playback package' : null,
+      selectedVideo.archiveObjectKey ? 'the archive file' : null,
     ].filter(Boolean);
 
     const confirmed = window.confirm(
@@ -1840,7 +1840,7 @@ export default function PlayerPage() {
     }
 
     const confirmed = window.confirm(
-      `Delete ${ids.length} asset${ids.length === 1 ? '' : 's'}? This will remove their Convex records and linked cloud assets. This cannot be undone.`,
+      `Delete ${ids.length} asset${ids.length === 1 ? '' : 's'}? This will remove their media library records and linked cloud assets. This cannot be undone.`,
     );
     if (!confirmed) {
       return;
@@ -2503,7 +2503,7 @@ export default function PlayerPage() {
             <div className="px-[26px] pt-[22px]">
               <Eyebrow>Where it is published</Eyebrow>
               <div className="mt-[7px] text-caption text-pretty text-quiet">
-                Read-only here — scheduling and publishing are done in the CSN web app.
+                Read-only here — scheduling and publishing are done in the connected viewer portal.
               </div>
               {publishSummary(selectedVideo).rows.length > 0 ? (
                 <div className="mt-[11px]">
@@ -2536,7 +2536,7 @@ export default function PlayerPage() {
               ) : (
                 <div className="mt-[11px] text-[13px] text-pretty text-quiet">
                   {selectedVideo.status === 'ready' || selectedVideo.status === 'draft'
-                    ? 'Not published anywhere yet. Publishing happens in the CSN web app.'
+                    ? 'Not published anywhere yet. Publishing happens in the connected viewer portal.'
                     : 'It will be publishable once processing finishes.'}
                 </div>
               )}

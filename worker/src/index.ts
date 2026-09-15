@@ -1,7 +1,7 @@
 /**
  * The credential broker.
  *
- * CSN Media Bridge stations upload with rclone, which means they need storage
+ * Media Bridge stations upload with rclone, which means they need storage
  * credentials on the machine. Until now those were the *master* B2 and R2 keys,
  * typed into Settings and left there — so anyone who could read a station's
  * disk gained permanent write and delete over every asset in both buckets.
@@ -44,16 +44,11 @@ interface Env {
  * What a station is asking to do. Capabilities follow from this rather than
  * from the caller, so a station token cannot talk its way into deletion.
  */
-type Purpose = 'ingest' | 'offload' | 'delete';
+type Purpose = 'ingest' | 'offload';
 
 const PURPOSES: Record<Purpose, { r2: boolean; b2: boolean; destructive: boolean }> = {
   ingest: { r2: true, b2: true, destructive: false },
   offload: { r2: false, b2: true, destructive: false },
-  // Deleting is the one thing a routine transfer never needs, so it is kept
-  // behind its own purpose. See the note in README.md: this should require an
-  // operator's identity, not just a station's, once machine identity moves to
-  // Clerk.
-  delete: { r2: true, b2: true, destructive: true },
 };
 
 function json(body: unknown, status = 200): Response {

@@ -13,11 +13,11 @@ B2_BUCKET_ID = ""
 CREDENTIAL_TTL_SECONDS = "21600"
 # Prefixes a station may be granted. Anything outside these is refused, so a
 # compromised station token cannot reach another team's assets.
-R2_ALLOWED_PREFIXES = "streaming/vod/,posters/"
-B2_ALLOWED_PREFIXES = "masters/,offload-stills/"
+R2_ALLOWED_PREFIXES = "videos/,posters/"
+B2_ALLOWED_PREFIXES = "masters/,offloads/"
 # Object prefixes /media will serve. Everything else is refused, so the archive
 # is not reachable through the playback route.
-MEDIA_ALLOWED_PREFIXES = "streaming/vod/,posters/"
+MEDIA_ALLOWED_PREFIXES = "videos/,posters/"
 # The library that answers who owns an object key.
 CONVEX_URL = "https://csn-sports.convex.cloud"
 # Enforce that a station's organization owns the asset it is asking for. Leave

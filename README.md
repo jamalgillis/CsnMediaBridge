@@ -1,6 +1,6 @@
-# CSN Media Bridge
+# Media Bridge
 
-CSN Media Bridge is a cross-platform Tauri desktop app for automated sports media ingest and operator-facing VOD management. It watches a folder for new video files, waits until each file is stable, automatically routes short-form clips to progressive playback and longer content to CMAF-compatible HLS/DASH playback, uploads the source and distribution assets with `rclone`, and then registers the finished playback metadata with Convex. It also includes a Convex-backed library for search, metadata editing, publish control, and poster replacement, plus a manual Offload page for post-shoot folder handoff, local package creation on a designated drive, checksum-tracked `webp` image generation, and optional Backblaze B2 upload for still-image assets only.
+Media Bridge is a cross-platform Tauri desktop app for automated sports media ingest and operator-facing VOD management. It watches a folder for new video files, waits until each file is stable, automatically routes short-form clips to progressive playback and longer content to CMAF-compatible HLS/DASH playback, uploads the source and distribution assets with `rclone`, and then registers the finished playback metadata with the media library. It also includes a library for search, metadata editing, publish control, and poster replacement, plus a manual Offload page for post-shoot folder handoff, local package creation on a designated drive, checksum-tracked `webp` image generation, and optional archive upload for still-image assets only.
 
 ## Documentation
 
@@ -100,11 +100,12 @@ protect.
 
 ## Storage credentials
 
-A station can hold the master B2 and R2 keys, or it can fetch short-lived scoped
-ones from the broker in [`worker/`](worker/README.md) — set under Settings →
-advanced → Storage credentials. With a broker configured, a leaked station is
-write access to one prefix for a few hours rather than delete access to
-everything. Stations fall back to their local keys if the broker is unreachable.
+A station can hold per-workstation storage keys in the OS keychain, or it can
+fetch short-lived scoped ones from the broker in [`worker/`](worker/README.md)
+— set under Settings → support settings → Storage credentials. With a broker
+configured, a leaked station token can mint write credentials only for allowed
+prefixes and only for a few hours. The app never writes storage keys, station
+tokens, media-library node tokens, or OAuth sessions into `settings.json`.
 
 ## System Requirements
 

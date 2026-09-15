@@ -40,7 +40,7 @@ function transferLine(transfer: StreamTransferSnapshot) {
   const verb = transfer.kind === 'archive' ? 'Archiving' : 'Saving';
   switch (transfer.status) {
     case 'preparing':
-      return transfer.message ?? 'Asking Stream to prepare the file.';
+      return transfer.message ?? 'Asking the streaming provider to prepare the file.';
     case 'transferring':
       return transfer.bytesTotal
         ? `${verb} · ${formatBytes(transfer.bytesDone)} of ${formatBytes(transfer.bytesTotal)}`
@@ -48,7 +48,7 @@ function transferLine(transfer: StreamTransferSnapshot) {
     case 'verifying':
       return 'Checking the archive copy.';
     case 'done':
-      return transfer.kind === 'archive' ? 'Archived to Backblaze.' : `Saved to ${transfer.destination}`;
+      return transfer.kind === 'archive' ? 'Archived.' : `Saved to ${transfer.destination}`;
     case 'canceled':
       return 'Canceled.';
     case 'failed':
@@ -226,8 +226,8 @@ export default function StreamLibrary() {
       </div>
 
       <div className="text-caption text-pretty text-muted">
-        Archiving copies the recording to Backblaze without using space on this machine. Stream
-        keeps its copy either way. It sends a re-encoded MP4, not the file the encoder originally
+        Archiving copies the recording to cloud storage without using space on this machine. The
+        streaming provider keeps its copy either way. It sends a re-encoded MP4, not the file the encoder originally
         sent.
         {activeCount > 0 ? ` ${activeCount} transfer${activeCount === 1 ? '' : 's'} running.` : ''}
         {!archiveChecked && !error ? ' Archive status unavailable.' : ''}
@@ -241,10 +241,10 @@ export default function StreamLibrary() {
           title="No recordings"
           body={
             appliedSearch
-              ? `Nothing in Stream matches "${appliedSearch}".`
+              ? `Nothing from the streaming provider matches "${appliedSearch}".`
               : liveOnly
-                ? 'Stream holds no live recordings you can see. Turn off "Live recordings only" to include uploaded videos.'
-                : 'Stream holds no videos you can see.'
+                ? 'The streaming provider has no live recordings you can see. Turn off "Live recordings only" to include uploaded videos.'
+                : 'The streaming provider has no videos you can see.'
           }
         />
       ) : (
@@ -306,7 +306,7 @@ export default function StreamLibrary() {
                         disabled={!recording.readyToStream}
                         title={inArchive ? 'Already archived. Archiving again replaces that copy.' : undefined}
                       >
-                        {inArchive ? 'Archive again' : 'Archive to Backblaze'}
+                        {inArchive ? 'Archive again' : 'Archive'}
                       </GhostButton>
                       <GhostButton onClick={() => void download(recording)} disabled={!recording.readyToStream}>
                         Download

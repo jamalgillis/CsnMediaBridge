@@ -143,9 +143,9 @@ For long-form VOD, the app generates a CMAF-compatible HLS/DASH package:
 - `1080p`, `720p`, `480p`, and `360p` variants
 - `master.m3u8`
 - `manifest.mpd`
-- variant playlists
-- per-variant init files such as `init_0.mp4`
-- `.m4s` segment files
+- variant playlists such as `video/1080p_6000k/stream.m3u8`
+- per-variant init files such as `video/1080p_6000k/init.mp4`
+- segment files such as `video/1080p_6000k/chunk_00001.m4s`
 
 The HLS and DASH manifests reference the same fragmented MP4 chunks, so the R2
 package does not store duplicate media segments for each streaming protocol.

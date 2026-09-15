@@ -36,12 +36,12 @@ import type { LiveStreamHandoffJobSnapshot } from '../shared/types';
 
 type View = 'cards' | 'gallery' | 'list';
 
-/** The conversion queue, or everything already sitting in Stream. */
+/** The conversion queue, or everything already held by the streaming provider. */
 type Section = 'queue' | 'library';
 
 const SECTIONS: readonly { key: Section; label: string }[] = [
   { key: 'queue', label: 'Conversion queue' },
-  { key: 'library', label: 'Stored in Stream' },
+  { key: 'library', label: 'Stored recordings' },
 ];
 
 const VIEWS: readonly { key: View; label: string }[] = [
@@ -249,7 +249,7 @@ export default function LiveStreamsPage() {
       <div className="max-w-[840px] px-[30px] pt-[30px]">
         <PageHeading
           title="Live streams"
-          subhead="Recordings from live events. Convert new ones into library videos, or archive and download what is already stored in Stream."
+          subhead="Recordings from live events. Convert new ones into library videos, or archive and download stored recordings."
         />
 
         <UnderlineTabs<Section> tabs={SECTIONS} value={section} onChange={setSection} className="mt-5" />
