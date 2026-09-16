@@ -24,7 +24,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          release_state=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,url --jq '.url + " " + (.isDraft | tostring)' 2>/dev/null || true)
+          if [ -n "$release_state" ]; then
+            release_url="${release_state% *}"
+            release_is_draft="${release_state##* }"
+            if [ "$release_is_draft" = "true" ] || [[ "$release_url" == *"/untagged-"* ]]; then
+              gh release delete "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --yes
+              release_state=""
+            fi
+          fi
+
+          if [ -z "$release_state" ]; then
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
           fi
 
@@ -186,8 +196,10 @@ jobs:
           human_installer="${human_installers[0]}"
           signature=$(cat "${installer}.sig")
           version="${GITHUB_REF_NAME#v}"
-          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$installer" | sed 's/ /%20/g')"
-          download_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$human_installer" | sed 's/ /%20/g')"
+          installer_asset_name=$(basename "$installer" | tr ' ' '.')
+          download_asset_name=$(basename "$human_installer" | tr ' ' '.')
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${installer_asset_name}"
+          download_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${download_asset_name}"
 
           mkdir -p feed/update feed/downloads
           printf '{"%s":{"signature":"%s","url":"%s"}}' "$target" "$signature" "$url" > "feed/update/${target}.json"
