@@ -4,8 +4,8 @@ This app now supports hosted desktop updates for packaged builds.
 
 Current release policy:
 
-- Windows: production updater path
-- macOS: Developer ID signed and notarized release artifacts
+- Windows: free unsigned NSIS/MSI installers with Tauri updater signing
+- macOS: free unsigned DMG/app bundles with Tauri updater signing
 
 ## 1. Create the dedicated GitHub repo
 
@@ -48,19 +48,9 @@ The workflow needs the Tauri updater signing key in GitHub Actions secrets:
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, if the key has a password
 
-Public macOS releases also need Apple Developer ID signing and notarization
-secrets:
-
-- `APPLE_CERTIFICATE` — base64-encoded `.p12` Developer ID Application certificate
-- `APPLE_CERTIFICATE_PASSWORD` — password used when exporting the `.p12`
-- `KEYCHAIN_PASSWORD` — temporary CI keychain password
-- `APPLE_ID` — Apple Developer account email
-- `APPLE_PASSWORD` — app-specific password for that Apple ID
-- `APPLE_TEAM_ID` — Apple Developer Team ID
-
 The checked-in workflow will:
 
-- build a Developer ID signed and notarized macOS release
+- build a free unsigned macOS DMG and signed Tauri updater artifact
 - build a Windows NSIS/MSI release
 - upload both sets of artifacts to GitHub Releases
 - deploy the updater feed and download page to GitHub Pages
@@ -94,16 +84,47 @@ Users need one manual upgrade to a build that includes the updater. After that, 
   - check for new builds on launch and on a timer
   - download updates in the background
   - prompt the user to install the update in-app
+  - show Windows SmartScreen on first install until the app gains reputation or
+    is signed with a paid code-signing certificate
 - on macOS:
   - check for new builds on launch and on a timer
   - install signed updater artifacts
-  - open normal downloaded DMGs after Apple notarization
+  - require the user to bypass Gatekeeper quarantine on first install because
+    Developer ID signing and notarization require a paid Apple Developer account
 
 ## Notes
 
 In-app updates are handled by `tauri-plugin-updater`.
 
-### The signing key
+### Free distribution limits
+
+The release workflow uses free distribution:
+
+- GitHub Actions builds the app.
+- GitHub Releases stores the installers.
+- GitHub Pages hosts the download page and updater feed.
+- Tauri updater signatures protect in-app updates from tampering.
+
+Free distribution does **not** provide operating-system publisher trust:
+
+- macOS will warn that the app is unsigned or damaged. The download page tells
+  users to drag the app to Applications and run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Media Bridge.app"
+```
+
+- Windows may show Microsoft Defender SmartScreen. The download page tells users
+  to choose `More info`, then `Run anyway`.
+
+Avoiding those warnings requires paid signing:
+
+- macOS: Apple Developer Program membership, Developer ID Application
+  certificate, and notarization.
+- Windows: Authenticode code-signing certificate. EV certificates usually build
+  SmartScreen trust faster, but they are also paid.
+
+### The updater signing key
 
 Tauri refuses to install an update it cannot verify, so releases have to be
 signed. Generate a keypair once:
@@ -129,7 +150,7 @@ pnpm exec tauri signer generate -w ~/.tauri/csn-media-bridge.key
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which:
 
-1. builds Developer ID signed and notarized macOS bundles plus Windows bundles,
+1. builds unsigned macOS bundles plus Windows bundles,
 2. attaches the installers — `.dmg`, `-setup.exe`, `.msi` — plus the signed
    updater artifacts to the GitHub Release,
 3. merges each platform's entry into `latest.json`, creates `downloads.json`,

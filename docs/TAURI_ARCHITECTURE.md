@@ -220,7 +220,7 @@ Rust was installed on this workstation with `rustup` using the minimal profile.
 `corepack pnpm run tauri:build` produces:
 
 - `src-tauri/target/release/bundle/macos/CSN Media Bridge.app`
-- `src-tauri/target/release/bundle/dmg/CSN Media Bridge_1.0.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Media Bridge_1.0.2_aarch64.dmg`
 
 Homebrew's `rust` formula was not used because it pulls a large `llvm@22`
 dependency and failed on this machine while disk space was tight.
