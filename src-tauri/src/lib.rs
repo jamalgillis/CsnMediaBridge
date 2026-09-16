@@ -58,13 +58,19 @@ const NODE_KEY_FILE_NAME: &str = "node-key.txt";
 #[cfg(not(test))]
 const KEYCHAIN_SERVICE: &str = "com.gfamagency.mediabridge";
 const AUTH_SESSION_KEYCHAIN_ACCOUNT: &str = "auth.session";
+const B2_KEY_ID_PATH: &[&str] = &["b2", "keyId"];
+const B2_APPLICATION_KEY_PATH: &[&str] = &["b2", "applicationKey"];
+const R2_ACCESS_KEY_ID_PATH: &[&str] = &["r2", "accessKeyId"];
+const R2_SECRET_ACCESS_KEY_PATH: &[&str] = &["r2", "secretAccessKey"];
+const CONVEX_NODE_TOKEN_PATH: &[&str] = &["convex", "nodeToken"];
+const BROKER_TOKEN_PATH: &[&str] = &["broker", "token"];
 const SECRET_SETTING_PATHS: &[(&[&str], &str)] = &[
-    (&["b2", "keyId"], "settings.b2.keyId"),
-    (&["b2", "applicationKey"], "settings.b2.applicationKey"),
-    (&["r2", "accessKeyId"], "settings.r2.accessKeyId"),
-    (&["r2", "secretAccessKey"], "settings.r2.secretAccessKey"),
-    (&["convex", "nodeToken"], "settings.convex.nodeToken"),
-    (&["broker", "token"], "settings.broker.token"),
+    (B2_KEY_ID_PATH, "settings.b2.keyId"),
+    (B2_APPLICATION_KEY_PATH, "settings.b2.applicationKey"),
+    (R2_ACCESS_KEY_ID_PATH, "settings.r2.accessKeyId"),
+    (R2_SECRET_ACCESS_KEY_PATH, "settings.r2.secretAccessKey"),
+    (CONVEX_NODE_TOKEN_PATH, "settings.convex.nodeToken"),
+    (BROKER_TOKEN_PATH, "settings.broker.token"),
 ];
 const MAX_JOB_HISTORY: usize = 50;
 const MAX_LOG_ENTRIES: usize = 200;
@@ -405,6 +411,22 @@ fn hydrate_settings_secrets(mut settings: Value) -> Result<Value, String> {
     for (path, account) in SECRET_SETTING_PATHS {
         if let Some(secret) = secure_read_secret(account)? {
             set_string_at_path(&mut settings, path, secret);
+        }
+    }
+    Ok(settings)
+}
+
+fn hydrate_settings_secret_paths(
+    mut settings: Value,
+    requested_paths: &[&[&str]],
+) -> Result<Value, String> {
+    for requested_path in requested_paths {
+        for (path, account) in SECRET_SETTING_PATHS {
+            if *path == *requested_path {
+                if let Some(secret) = secure_read_secret(account)? {
+                    set_string_at_path(&mut settings, path, secret);
+                }
+            }
         }
     }
     Ok(settings)
@@ -3308,6 +3330,27 @@ fn settings_snapshot_from_state(state: &tauri::State<'_, AppState>) -> Result<Va
         .map(|settings| settings.clone())
 }
 
+fn load_settings_secret_paths_from_state(
+    state: &tauri::State<'_, AppState>,
+    requested_paths: &[&[&str]],
+) -> Result<Value, String> {
+    let hydrated =
+        hydrate_settings_secret_paths(settings_snapshot_from_state(state)?, requested_paths)?;
+
+    let mut settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock is unavailable.".to_string())?;
+    for path in requested_paths {
+        let secret = string_setting(&hydrated, path).to_string();
+        if !secret.is_empty() {
+            set_string_at_path(&mut settings, path, secret);
+        }
+    }
+
+    Ok(hydrated)
+}
+
 fn state_snapshot(state: &tauri::State<'_, AppState>) -> Result<Value, String> {
     let settings = state
         .settings
@@ -6018,15 +6061,26 @@ fn run_stream_transfer(
     cancel: Arc<AtomicBool>,
 ) {
     let state = app.state::<AppState>();
+    let secret_paths: &[&[&str]] = if kind == "archive" {
+        &[
+            CONVEX_NODE_TOKEN_PATH,
+            B2_KEY_ID_PATH,
+            B2_APPLICATION_KEY_PATH,
+        ]
+    } else {
+        &[CONVEX_NODE_TOKEN_PATH]
+    };
     let outcome =
-        load_settings_from_state(&state).and_then(|settings| match (kind, destination.as_ref()) {
-            ("archive", _) => {
-                archive_stream_recording_inner(&app, &settings, &uid, &recording, &cancel)
+        load_settings_secret_paths_from_state(&state, secret_paths).and_then(|settings| {
+            match (kind, destination.as_ref()) {
+                ("archive", _) => {
+                    archive_stream_recording_inner(&app, &settings, &uid, &recording, &cancel)
+                }
+                (_, Some(destination)) => {
+                    download_stream_recording_inner(&app, &settings, &uid, destination, &cancel)
+                }
+                _ => Err("No destination was chosen.".to_string()),
             }
-            (_, Some(destination)) => {
-                download_stream_recording_inner(&app, &settings, &uid, destination, &cancel)
-            }
-            _ => Err("No destination was chosen.".to_string()),
         });
 
     let title = trim_string(recording.get("name")).unwrap_or_else(|| uid.clone());
@@ -6107,8 +6161,9 @@ async fn list_stream_recordings(
     state: tauri::State<'_, AppState>,
     request: Value,
 ) -> Result<Value, String> {
-    let settings = load_settings_from_state(&state)?;
+    let settings = settings_snapshot_from_state(&state)?;
     require_stream_library(&settings)?;
+    let settings = load_settings_secret_paths_from_state(&state, &[CONVEX_NODE_TOKEN_PATH])?;
 
     let mut args = serde_json::Map::new();
     insert_if_present(
@@ -6141,10 +6196,14 @@ async fn list_stream_recordings(
 async fn list_archived_stream_uids(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let settings = load_settings_from_state(&state)?;
+    let settings = settings_snapshot_from_state(&state)?;
     if string_setting(&settings, &["b2", "bucket"])
         .trim()
         .is_empty()
+        || string_setting(&settings, B2_KEY_ID_PATH).trim().is_empty()
+        || string_setting(&settings, B2_APPLICATION_KEY_PATH)
+            .trim()
+            .is_empty()
     {
         return Ok(Vec::new());
     }
@@ -6181,7 +6240,7 @@ async fn archive_stream_recording(
     state: tauri::State<'_, AppState>,
     request: Value,
 ) -> Result<Value, String> {
-    let settings = load_settings_from_state(&state)?;
+    let settings = settings_snapshot_from_state(&state)?;
     require_stream_library(&settings)?;
     if string_setting(&settings, &["b2", "bucket"])
         .trim()
@@ -6189,6 +6248,14 @@ async fn archive_stream_recording(
     {
         return Err("Set up Backblaze in Settings before archiving recordings.".to_string());
     }
+    load_settings_secret_paths_from_state(
+        &state,
+        &[
+            CONVEX_NODE_TOKEN_PATH,
+            B2_KEY_ID_PATH,
+            B2_APPLICATION_KEY_PATH,
+        ],
+    )?;
 
     let (uid, recording) = stream_recording_request(&request)?;
     let keys = stream_archive_keys(
@@ -6212,8 +6279,9 @@ async fn download_stream_recording(
     state: tauri::State<'_, AppState>,
     request: Value,
 ) -> Result<Value, String> {
-    let settings = load_settings_from_state(&state)?;
+    let settings = settings_snapshot_from_state(&state)?;
     require_stream_library(&settings)?;
+    load_settings_secret_paths_from_state(&state, &[CONVEX_NODE_TOKEN_PATH])?;
     let (uid, recording) = stream_recording_request(&request)?;
 
     let suggested = format!(

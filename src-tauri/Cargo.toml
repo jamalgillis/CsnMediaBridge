@@ -1,6 +1,6 @@
 [package]
 name = "csn-media-bridge-tauri"
-version = "1.0.3"
+version = "1.0.4"
 description = "Tauri host for Media Bridge."
 authors = ["Media Bridge"]
 edition = "2021"
