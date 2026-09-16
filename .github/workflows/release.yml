@@ -46,7 +46,7 @@ jobs:
             bundles: nsis,msi
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -54,7 +54,7 @@ jobs:
           version: 10.19.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -141,7 +141,7 @@ jobs:
           printf '{"%s":{"signature":"%s","url":"%s"}}' "$target" "$signature" "$url" > "feed/${target}.json"
 
       - name: Upload the update fragment
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: feed-${{ runner.os }}
           path: feed
@@ -155,7 +155,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Collect the update fragments
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: feed-*
           path: fragments
@@ -175,10 +175,10 @@ jobs:
           cat pages/latest.json
 
       - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: pages
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
