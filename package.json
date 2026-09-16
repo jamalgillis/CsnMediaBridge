@@ -1,7 +1,7 @@
 {
   "name": "csn-media-bridge",
   "productName": "Media Bridge",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Cross-platform Tauri ingest station for automated VOD transcoding and cloud sync.",
   "private": true,
   "packageManager": "pnpm@10.19.0",

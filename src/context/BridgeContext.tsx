@@ -1,6 +1,7 @@
 import {
   createContext,
   startTransition,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -24,6 +25,7 @@ interface BridgeContextValue {
   isSavingSettings: boolean;
   actionError: string | null;
   clearActionError: () => void;
+  loadSettings: () => Promise<AppSettings>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   importConnectionProfile: () => Promise<ConnectionProfileImportResult>;
   exportConnectionProfile: (profileName?: string) => Promise<ConnectionProfileExportResult>;
@@ -61,7 +63,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    void Promise.all([window.mediaBridge.getState(), window.mediaBridge.loadSettings()])
+    void Promise.all([window.mediaBridge.getState(), window.mediaBridge.loadStartupSettings()])
       .then(([nextState, nextSettings]) => {
         if (!isMounted) {
           return;
@@ -95,6 +97,13 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const loadSettings = useCallback(async () => {
+    const nextSettings = await window.mediaBridge.loadSettings();
+    setSettings(nextSettings);
+    setActionError(null);
+    return nextSettings;
+  }, []);
+
   const value: BridgeContextValue = {
     state,
     settings,
@@ -102,6 +111,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
     isSavingSettings,
     actionError,
     clearActionError: () => setActionError(null),
+    loadSettings,
     saveSettings: async (nextSettings) => {
       setIsSavingSettings(true);
       try {

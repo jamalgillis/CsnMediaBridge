@@ -74,6 +74,7 @@ function installTauriMediaBridge() {
 
   const mediaBridgeApi: MediaBridgeApi = {
     getState: () => invoke('get_state'),
+    loadStartupSettings: () => invoke('load_startup_settings'),
     loadSettings: () => invoke('load_settings'),
     saveSettings: (settings) => invoke('save_settings', { settings }),
     importConnectionProfile: () => invoke('import_connection_profile'),

@@ -85,6 +85,7 @@ export default function SettingsPage() {
   const {
     settings,
     state,
+    loadSettings,
     saveSettings,
     importConnectionProfile,
     exportConnectionProfile,
@@ -101,6 +102,26 @@ export default function SettingsPage() {
   useEffect(() => {
     setDraft(settings);
   }, [settings]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    void loadSettings()
+      .then((nextSettings) => {
+        if (!canceled) {
+          setDraft(nextSettings);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          flash(error instanceof Error ? error.message : String(error));
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [flash, loadSettings]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
 

@@ -423,11 +423,11 @@ fn write_settings_json(path: &Path, settings: &Value) -> Result<(), String> {
         .map_err(|error| format!("Could not write {}: {error}", path.display()))
 }
 
-fn read_settings_file() -> Result<Value, String> {
+fn read_settings_file_without_secrets() -> Result<Value, String> {
     let path = settings_path()?;
 
     if !path.exists() {
-        return hydrate_settings_secrets(default_settings());
+        return Ok(default_settings());
     }
 
     let raw_settings = fs::read_to_string(&path)
@@ -435,8 +435,20 @@ fn read_settings_file() -> Result<Value, String> {
     let saved_settings = serde_json::from_str::<Value>(&raw_settings)
         .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
 
-    let normalized_settings =
-        normalize_settings_value(merge_defaults(default_settings(), saved_settings));
+    Ok(normalize_settings_value(merge_defaults(
+        default_settings(),
+        saved_settings,
+    )))
+}
+
+fn read_settings_file() -> Result<Value, String> {
+    let path = settings_path()?;
+
+    if !path.exists() {
+        return Ok(default_settings());
+    }
+
+    let normalized_settings = read_settings_file_without_secrets()?;
     if has_inline_settings_secrets(&normalized_settings) {
         store_settings_secrets(&normalized_settings)?;
         write_settings_json(&path, &redact_secret_settings(normalized_settings.clone()))?;
@@ -2007,7 +2019,7 @@ fn credential_refresh_loop(app: tauri::AppHandle) {
     loop {
         let settings = {
             let state = app.state::<AppState>();
-            load_settings_from_state(&state).unwrap_or_else(|_| default_settings())
+            settings_snapshot_from_state(&state).unwrap_or_else(|_| default_settings())
         };
 
         if broker_is_configured(&settings) {
@@ -3286,6 +3298,14 @@ fn load_settings_from_state(state: &tauri::State<'_, AppState>) -> Result<Value,
     let loaded_settings = read_settings_file()?;
     *settings = loaded_settings.clone();
     Ok(loaded_settings)
+}
+
+fn settings_snapshot_from_state(state: &tauri::State<'_, AppState>) -> Result<Value, String> {
+    state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock is unavailable.".to_string())
+        .map(|settings| settings.clone())
 }
 
 fn state_snapshot(state: &tauri::State<'_, AppState>) -> Result<Value, String> {
@@ -7950,28 +7970,6 @@ fn auth_is_configured(settings: &Value) -> bool {
     !auth_issuer(settings).is_empty() && !auth_client_id(settings).is_empty()
 }
 
-fn read_auth_file() -> Result<Option<Value>, String> {
-    if let Some(raw) = secure_read_secret(AUTH_SESSION_KEYCHAIN_ACCOUNT)? {
-        return serde_json::from_str::<Value>(&raw)
-            .map(Some)
-            .map_err(|error| format!("Could not parse the saved sign-in session: {error}"));
-    }
-
-    let path = auth_file_path()?;
-    if !path.exists() {
-        return Ok(None);
-    }
-
-    let raw = fs::read_to_string(&path)
-        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
-    let session = serde_json::from_str::<Value>(&raw)
-        .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
-
-    secure_write_secret(AUTH_SESSION_KEYCHAIN_ACCOUNT, &raw)?;
-    let _ = fs::remove_file(&path);
-    Ok(Some(session))
-}
-
 fn write_auth_file(session: Option<&Value>) -> Result<(), String> {
     let path = auth_file_path()?;
 
@@ -8032,7 +8030,7 @@ fn store_auth_session(app: &tauri::AppHandle, session: Option<Value>) {
 
 fn emit_auth_update(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
-    let Ok(settings) = load_settings_from_state(&state) else {
+    let Ok(settings) = settings_snapshot_from_state(&state) else {
         return;
     };
     let session = state
@@ -8314,7 +8312,7 @@ async fn auth_sign_in(app: tauri::AppHandle) -> Result<Value, String> {
 
     let settings = {
         let state = app.state::<AppState>();
-        load_settings_from_state(&state)?
+        settings_snapshot_from_state(&state)?
     };
 
     if !auth_is_configured(&settings) {
@@ -8446,7 +8444,7 @@ async fn auth_sign_in(app: tauri::AppHandle) -> Result<Value, String> {
 
 #[tauri::command]
 async fn auth_status(state: tauri::State<'_, AppState>) -> Result<Value, String> {
-    let settings = load_settings_from_state(&state)?;
+    let settings = settings_snapshot_from_state(&state)?;
     let session = state
         .auth_session
         .lock()
@@ -8462,7 +8460,7 @@ async fn auth_status(state: tauri::State<'_, AppState>) -> Result<Value, String>
 async fn auth_sign_out(app: tauri::AppHandle) -> Result<Value, String> {
     let (settings, session) = {
         let state = app.state::<AppState>();
-        let settings = load_settings_from_state(&state)?;
+        let settings = settings_snapshot_from_state(&state)?;
         let session = state
             .auth_session
             .lock()
@@ -8497,7 +8495,7 @@ async fn auth_sign_out(app: tauri::AppHandle) -> Result<Value, String> {
 async fn auth_get_token(app: tauri::AppHandle) -> Result<Value, String> {
     let (settings, session) = {
         let state = app.state::<AppState>();
-        let settings = load_settings_from_state(&state)?;
+        let settings = settings_snapshot_from_state(&state)?;
         let session = state
             .auth_session
             .lock()
@@ -8553,6 +8551,11 @@ async fn auth_get_token(app: tauri::AppHandle) -> Result<Value, String> {
 #[tauri::command]
 async fn get_state(state: tauri::State<'_, AppState>) -> Result<Value, String> {
     state_snapshot(&state)
+}
+
+#[tauri::command]
+async fn load_startup_settings(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    settings_snapshot_from_state(&state)
 }
 
 #[tauri::command]
@@ -10202,7 +10205,7 @@ fn live_handoff_loop(app: tauri::AppHandle) {
 
     loop {
         let state = app.state::<AppState>();
-        let settings = load_settings_from_state(&state).ok();
+        let settings = settings_snapshot_from_state(&state).ok();
 
         if let Some(settings) = settings.filter(convex_is_configured) {
             let outcome = tauri::async_runtime::block_on(async {
@@ -10241,13 +10244,9 @@ fn live_handoff_loop(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let settings = read_settings_file().unwrap_or_else(|error| {
+    let settings = read_settings_file_without_secrets().unwrap_or_else(|error| {
         eprintln!("Could not load saved settings: {error}");
         default_settings()
-    });
-    let auth_session = read_auth_file().unwrap_or_else(|error| {
-        eprintln!("Could not load saved sign-in session: {error}");
-        None
     });
 
     tauri::Builder::default()
@@ -10270,11 +10269,12 @@ pub fn run() {
             offload_cancel: Arc::new(AtomicBool::new(false)),
             watching: Arc::new(AtomicBool::new(false)),
             pending_update: Mutex::new(None),
-            auth_session: Mutex::new(auth_session),
+            auth_session: Mutex::new(None),
             app_update: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             get_state,
+            load_startup_settings,
             load_settings,
             save_settings,
             import_connection_profile,
@@ -10334,8 +10334,8 @@ pub fn run() {
                 loop {
                     let interval_minutes = {
                         let state = handle.state::<AppState>();
-                        let settings =
-                            load_settings_from_state(&state).unwrap_or_else(|_| default_settings());
+                        let settings = settings_snapshot_from_state(&state)
+                            .unwrap_or_else(|_| default_settings());
                         let enabled = bool_setting(&settings, &["appUpdates", "enabled"], false);
 
                         if enabled {
@@ -10380,7 +10380,7 @@ pub fn run() {
             let watch_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = watch_handle.state::<AppState>();
-                let Ok(settings) = load_settings_from_state(&state) else {
+                let Ok(settings) = settings_snapshot_from_state(&state) else {
                     return;
                 };
 

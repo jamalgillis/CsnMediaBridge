@@ -38,6 +38,7 @@ import type {
 
 export interface MediaBridgeApi {
   getState: () => Promise<BridgeStateSnapshot>;
+  loadStartupSettings: () => Promise<AppSettings>;
   loadSettings: () => Promise<AppSettings>;
   saveSettings: (settings: AppSettings) => Promise<SaveSettingsResult>;
   importConnectionProfile: () => Promise<ConnectionProfileImportResult>;
