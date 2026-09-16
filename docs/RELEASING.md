@@ -5,7 +5,7 @@ This app now supports hosted desktop updates for packaged builds.
 Current release policy:
 
 - Windows: production updater path
-- macOS: signed updater artifact; notarization is still recommended before broad external distribution
+- macOS: Developer ID signed and notarized release artifacts
 
 ## 1. Create the dedicated GitHub repo
 
@@ -48,12 +48,22 @@ The workflow needs the Tauri updater signing key in GitHub Actions secrets:
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, if the key has a password
 
+Public macOS releases also need Apple Developer ID signing and notarization
+secrets:
+
+- `APPLE_CERTIFICATE` — base64-encoded `.p12` Developer ID Application certificate
+- `APPLE_CERTIFICATE_PASSWORD` — password used when exporting the `.p12`
+- `KEYCHAIN_PASSWORD` — temporary CI keychain password
+- `APPLE_ID` — Apple Developer account email
+- `APPLE_PASSWORD` — app-specific password for that Apple ID
+- `APPLE_TEAM_ID` — Apple Developer Team ID
+
 The checked-in workflow will:
 
-- build a signed macOS updater artifact
-- build a Windows Squirrel release
+- build a Developer ID signed and notarized macOS release
+- build a Windows NSIS/MSI release
 - upload both sets of artifacts to GitHub Releases
-- deploy the updater feed to GitHub Pages
+- deploy the updater feed and download page to GitHub Pages
 
 Copy [`.env.release.example`](/Users/jamalgillis/Code/Projects/Web/Apps/CsnMediaBridge/.env.release.example) to your own local release env file if you also want to build release artifacts locally.
 
@@ -87,7 +97,7 @@ Users need one manual upgrade to a build that includes the updater. After that, 
 - on macOS:
   - check for new builds on launch and on a timer
   - install signed updater artifacts
-  - still benefit from Apple notarization before being handed to non-technical operators
+  - open normal downloaded DMGs after Apple notarization
 
 ## Notes
 
@@ -119,15 +129,11 @@ pnpm exec tauri signer generate -w ~/.tauri/csn-media-bridge.key
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which:
 
-1. builds signed macOS and Windows bundles,
+1. builds Developer ID signed and notarized macOS bundles plus Windows bundles,
 2. attaches the installers — `.dmg`, `-setup.exe`, `.msi` — plus the signed
    updater artifacts to the GitHub Release,
-3. merges each platform's entry into a single `latest.json` and deploys it to
-   GitHub Pages.
+3. merges each platform's entry into `latest.json`, creates `downloads.json`,
+   and deploys both plus a human download page to GitHub Pages.
 
 Point Settings → **Feed base URL** at the directory holding `latest.json`, e.g.
 `https://<owner>.github.io/<repo>`.
-
-- Add Apple Developer ID signing and notarization to the `tauri build` step
-  before sending macOS installers to non-technical operators outside your own
-  controlled machines.
