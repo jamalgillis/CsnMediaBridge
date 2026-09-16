@@ -113,7 +113,8 @@ jobs:
 
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
 
-      # One entry per platform, merged into a single latest.json below.
+      # One entry per platform, merged into latest.json for the updater and
+      # downloads.json for the human download page below.
       - name: Describe this platform's update
         env:
           GH_TOKEN: ${{ github.token }}
@@ -122,8 +123,20 @@ jobs:
           # The updater installs from the signed artifact, which on macOS is the
           # .app tarball rather than the .dmg a human downloads.
           case "${{ runner.os }}" in
-            macOS)   target="darwin-aarch64"; installers=(src-tauri/target/release/bundle/macos/*.app.tar.gz) ;;
-            Windows) target="windows-x86_64";  installers=(src-tauri/target/release/bundle/nsis/*-setup.exe) ;;
+            macOS)
+              target="darwin-aarch64"
+              download_key="macos"
+              download_label="Download for macOS"
+              installers=(src-tauri/target/release/bundle/macos/*.app.tar.gz)
+              human_installers=(src-tauri/target/release/bundle/dmg/*.dmg)
+              ;;
+            Windows)
+              target="windows-x86_64"
+              download_key="windows"
+              download_label="Download for Windows"
+              installers=(src-tauri/target/release/bundle/nsis/*-setup.exe)
+              human_installers=(src-tauri/target/release/bundle/nsis/*-setup.exe)
+              ;;
             *)       echo "Unsupported runner." >&2; exit 1 ;;
           esac
 
@@ -131,14 +144,21 @@ jobs:
             echo "No signed updater artifact was produced for ${{ runner.os }}." >&2
             exit 1
           fi
+          if [ ${#human_installers[@]} -eq 0 ]; then
+            echo "No human installer was produced for ${{ runner.os }}." >&2
+            exit 1
+          fi
 
           installer="${installers[0]}"
+          human_installer="${human_installers[0]}"
           signature=$(cat "${installer}.sig")
           version="${GITHUB_REF_NAME#v}"
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$installer" | sed 's/ /%20/g')"
+          download_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$human_installer" | sed 's/ /%20/g')"
 
-          mkdir -p feed
-          printf '{"%s":{"signature":"%s","url":"%s"}}' "$target" "$signature" "$url" > "feed/${target}.json"
+          mkdir -p feed/update feed/downloads
+          printf '{"%s":{"signature":"%s","url":"%s"}}' "$target" "$signature" "$url" > "feed/update/${target}.json"
+          printf '{"%s":{"label":"%s","url":"%s"}}' "$download_key" "$download_label" "$download_url" > "feed/downloads/${download_key}.json"
 
       - name: Upload the update fragment
         uses: actions/upload-artifact@v7
@@ -171,8 +191,141 @@ jobs:
             --arg version "$version" \
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{version: $version, pub_date: $pub_date, platforms: add}' \
-            fragments/*.json > pages/latest.json
+            fragments/update/*.json > pages/latest.json
+          jq -s \
+            --arg version "$version" \
+            --arg release "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}" \
+            '{version: $version, release: $release, platforms: add}' \
+            fragments/downloads/*.json > pages/downloads.json
           cat pages/latest.json
+          cat pages/downloads.json
+
+      - name: Create the download page
+        run: |
+          cat > pages/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>Media Bridge Downloads</title>
+              <style>
+                :root {
+                  color-scheme: light dark;
+                  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                  background: #0f1720;
+                  color: #f8fafc;
+                }
+                body {
+                  min-height: 100vh;
+                  margin: 0;
+                  display: grid;
+                  place-items: center;
+                  padding: 32px;
+                  box-sizing: border-box;
+                }
+                main {
+                  width: min(100%, 680px);
+                }
+                h1 {
+                  margin: 0 0 10px;
+                  font-size: clamp(34px, 8vw, 64px);
+                  line-height: 1;
+                  letter-spacing: 0;
+                }
+                p {
+                  margin: 0 0 24px;
+                  color: #cbd5e1;
+                  font-size: 18px;
+                  line-height: 1.5;
+                }
+                .primary {
+                  display: inline-flex;
+                  align-items: center;
+                  justify-content: center;
+                  min-height: 52px;
+                  padding: 0 22px;
+                  border-radius: 8px;
+                  background: #38bdf8;
+                  color: #06111f;
+                  font-weight: 750;
+                  text-decoration: none;
+                }
+                .links {
+                  display: flex;
+                  flex-wrap: wrap;
+                  gap: 14px 18px;
+                  margin-top: 24px;
+                }
+                .links a {
+                  color: #93c5fd;
+                }
+                .meta {
+                  margin-top: 20px;
+                  color: #94a3b8;
+                  font-size: 14px;
+                }
+              </style>
+            </head>
+            <body>
+              <main>
+                <h1>Media Bridge</h1>
+                <p id="summary">Loading the latest installer...</p>
+                <a class="primary" id="primary" href="https://github.com/jamalgillis/CsnMediaBridge/releases">View downloads</a>
+                <div class="links" id="links"></div>
+                <div class="meta" id="meta"></div>
+              </main>
+              <script>
+                const fallbackRelease = "https://github.com/jamalgillis/CsnMediaBridge/releases";
+                const platformName = () => {
+                  const ua = navigator.userAgent || "";
+                  const platform = navigator.platform || "";
+                  if (/Mac|Darwin/.test(platform) || /Mac OS X/.test(ua)) return "macos";
+                  if (/Win/.test(platform) || /Windows/.test(ua)) return "windows";
+                  return "";
+                };
+
+                fetch("downloads.json", { cache: "no-store" })
+                  .then((response) => {
+                    if (!response.ok) throw new Error("downloads.json unavailable");
+                    return response.json();
+                  })
+                  .then((data) => {
+                    const platforms = data.platforms || {};
+                    const preferredKey = platformName();
+                    const preferred = platforms[preferredKey] || platforms.macos || platforms.windows;
+                    const primary = document.getElementById("primary");
+                    const summary = document.getElementById("summary");
+                    const links = document.getElementById("links");
+                    const meta = document.getElementById("meta");
+
+                    if (preferred) {
+                      primary.href = preferred.url;
+                      primary.textContent = preferred.label;
+                      summary.textContent = "Download the latest production installer.";
+                    }
+
+                    Object.entries(platforms).forEach(([key, item]) => {
+                      const link = document.createElement("a");
+                      link.href = item.url;
+                      link.textContent = item.label;
+                      links.appendChild(link);
+                    });
+
+                    const release = document.createElement("a");
+                    release.href = data.release || fallbackRelease;
+                    release.textContent = "Release notes";
+                    links.appendChild(release);
+
+                    meta.textContent = data.version ? `Latest version: ${data.version}` : "";
+                  })
+                  .catch(() => {
+                    document.getElementById("summary").textContent = "Downloads are available from the GitHub releases page.";
+                  });
+              </script>
+            </body>
+          </html>
+          HTML
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v5
